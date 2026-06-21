@@ -55,10 +55,12 @@ import {
   normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryMatchesDirectoryFilters,
   onlineGameSummaryMatchesPersonalDirectoryFilters,
+  onlineGameSummaryMatchesPublicProfileDirectoryFilters,
   type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
   type OnlineGameDirectoryRatingFilter,
   type OnlinePersonalGameDirectoryListOptions,
+  type OnlinePublicProfileGameDirectoryListOptions,
   type OnlineGameDirectoryResultFilter,
   type OnlineGameDirectoryResponse,
   OnlineGameSummary,
@@ -440,6 +442,9 @@ export interface CreateOnlineHttpServerOptions {
   listPersonalGameSummaries?: (
     options: OnlinePersonalGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  listPublicProfileGameSummaries?: (
+    options: OnlinePublicProfileGameDirectoryListOptions
+  ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   listAccountRatingHistory?: (
     accountId: string,
     limit?: number
@@ -695,6 +700,101 @@ function parsePersonalDirectoryOptions(
       rating: rating as OnlinePersonalGameDirectoryListOptions["rating"],
       result: result as OnlineGameDirectoryResultFilter | undefined,
       query,
+    },
+  };
+}
+
+function parsePublicProfileGameDirectoryOptions(
+  originalUrl: string,
+  identity: OnlineIdentity
+):
+  | { ok: true; options: OnlinePublicProfileGameDirectoryListOptions }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Public profile games query is invalid." };
+  }
+
+  for (const name of ["state", "limit", "cursor", "clock", "rating", "result"]) {
+    if (url.searchParams.getAll(name).length > 1) {
+      return { ok: false, message: "Public profile games query is invalid." };
+    }
+  }
+  for (const name of url.searchParams.keys()) {
+    if (
+      name !== "state" &&
+      name !== "limit" &&
+      name !== "cursor" &&
+      name !== "clock" &&
+      name !== "rating" &&
+      name !== "result"
+    ) {
+      return { ok: false, message: "Public profile games query is invalid." };
+    }
+  }
+
+  const state = getSingleSearchParam(url.searchParams, "state") ?? "all";
+  if (!ONLINE_GAME_DIRECTORY_STATES.has(state as OnlinePublicProfileGameDirectoryListOptions["state"])) {
+    return { ok: false, message: "Public profile games state is invalid." };
+  }
+
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ONLINE_GAME_DIRECTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Public profile games limit is invalid." };
+  }
+
+  const cursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  if (cursor) {
+    const decoded = decodeOnlineGameDirectoryCursor(cursor);
+    if (!decoded.ok) {
+      return { ok: false, message: "Public profile games cursor is invalid." };
+    }
+  }
+
+  const rawClock = getSingleSearchParam(url.searchParams, "clock");
+  if (
+    rawClock !== null &&
+    !ONLINE_GAME_DIRECTORY_CLOCK_FILTERS.has(rawClock as OnlineGameDirectoryClockFilter)
+  ) {
+    return { ok: false, message: "Public profile games clock filter is invalid." };
+  }
+  const clock = rawClock ?? undefined;
+
+  const rawRating = getSingleSearchParam(url.searchParams, "rating");
+  if (
+    rawRating !== null &&
+    !ONLINE_GAME_DIRECTORY_RATING_FILTERS.has(rawRating as OnlineGameDirectoryRatingFilter)
+  ) {
+    return { ok: false, message: "Public profile games rating filter is invalid." };
+  }
+  const rating = rawRating ?? undefined;
+
+  const rawResult = getSingleSearchParam(url.searchParams, "result");
+  if (
+    rawResult !== null &&
+    !ONLINE_GAME_DIRECTORY_RESULT_FILTERS.has(rawResult as OnlineGameDirectoryResultFilter)
+  ) {
+    return { ok: false, message: "Public profile games result filter is invalid." };
+  }
+  const result = rawResult ?? undefined;
+
+  return {
+    ok: true,
+    options: {
+      identity,
+      visibility: "public",
+      state: state as OnlinePublicProfileGameDirectoryListOptions["state"],
+      limit,
+      cursor,
+      clock: clock as OnlineGameDirectoryClockFilter | undefined,
+      rating: rating as OnlinePublicProfileGameDirectoryListOptions["rating"],
+      result: result as OnlineGameDirectoryResultFilter | undefined,
     },
   };
 }
@@ -1267,6 +1367,28 @@ function paginatePersonalDirectorySummaries(
   const filtered = applyDirectoryCursor(
     summaries
       .filter((summary) => onlineGameSummaryMatchesPersonalDirectoryFilters(summary, options))
+      .sort(compareDirectorySummaries),
+    options.cursor
+  );
+  const games = filtered.slice(0, options.limit);
+  const nextCursor =
+    filtered.length > options.limit && games.length > 0
+      ? encodeOnlineGameDirectoryCursor(games[games.length - 1])
+      : undefined;
+  return {
+    schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+    games,
+    nextCursor,
+  };
+}
+
+function paginatePublicProfileDirectorySummaries(
+  summaries: OnlineGameSummary[],
+  options: OnlinePublicProfileGameDirectoryListOptions
+): OnlineGameDirectoryResponse {
+  const filtered = applyDirectoryCursor(
+    summaries
+      .filter((summary) => onlineGameSummaryMatchesPublicProfileDirectoryFilters(summary, options))
       .sort(compareDirectorySummaries),
     options.cursor
   );
@@ -2922,6 +3044,42 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
     return await withLiveServerPresenceDirectory(
       paginatePersonalDirectorySummaries(validated, directoryOptions)
+    );
+  };
+
+  const listPublicProfileGameDirectory = async (
+    directoryOptions: OnlinePublicProfileGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse> => {
+    if (options.listPublicProfileGameSummaries) {
+      const response = await options.listPublicProfileGameSummaries(directoryOptions);
+      const validation = validateOnlineGameDirectoryResponse(
+        stripOnlineGameDirectoryResponseOnlyFields(response)
+      );
+      if (!validation.ok) {
+        throw new Error(validation.error.message);
+      }
+      if (
+        validation.value.games.some(
+          (summary) => !onlineGameSummaryMatchesPublicProfileDirectoryFilters(summary, directoryOptions)
+        )
+      ) {
+        throw new Error("Public profile games returned a game for a different identity.");
+      }
+      return await withLiveServerPresenceDirectory(validation.value);
+    }
+
+    const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
+    const validated = summaries.map((summary, index) => {
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(summary)
+      );
+      if (!validation.ok) {
+        throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    return await withLiveServerPresenceDirectory(
+      paginatePublicProfileDirectorySummaries(validated, directoryOptions)
     );
   };
 
@@ -4654,6 +4812,63 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.profile.lookup", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Online profile could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/profiles/:displayName/games", async (req, res) => {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many public directory requests were sent too quickly." },
+      });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Profile display name is invalid." },
+      });
+      return;
+    }
+    const queryPreflight = parsePublicProfileGameDirectoryOptions(req.originalUrl, {
+      kind: "registered",
+      id: "profile-query-preflight",
+      displayName,
+    });
+    if (!queryPreflight.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: queryPreflight.message },
+      });
+      return;
+    }
+    try {
+      const accountId = await accountStore.resolveAccountIdForDisplayName(displayName);
+      if (!accountId) {
+        log({ event: "online.account.profile.games", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account was found for that profile." },
+        });
+        return;
+      }
+      const parsed = parsePublicProfileGameDirectoryOptions(req.originalUrl, {
+        kind: "registered",
+        id: accountId,
+        displayName,
+      });
+      if (!parsed.ok) {
+        res.status(400).json({
+          error: { code: "bad_request", message: parsed.message },
+        });
+        return;
+      }
+      const directory = await listPublicProfileGameDirectory(parsed.options);
+      log({ event: "online.account.profile.games", status: "accepted" });
+      res.json(redactAccountResponseGameDirectory(directory));
+    } catch (error) {
+      console.error("Failed to load public profile games", error);
+      log({ event: "online.account.profile.games", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Public profile games could not be loaded." },
       });
     }
   });

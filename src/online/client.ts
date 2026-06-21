@@ -3034,6 +3034,50 @@ export async function fetchOnlineGameDirectory(
   return validation.value;
 }
 
+export interface FetchOnlinePublicProfileGamesOptions {
+  state?: OnlineGameDirectoryState;
+  limit?: number;
+  cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineRatingMode;
+  result?: OnlineGameDirectoryResultFilter;
+}
+
+function buildOnlinePublicProfileGamesPath(
+  displayName: string,
+  options: FetchOnlinePublicProfileGamesOptions = {}
+): string {
+  const params = new URLSearchParams();
+  if (options.state) params.set("state", options.state);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.clock) params.set("clock", options.clock);
+  if (options.rating) params.set("rating", options.rating);
+  if (options.result) params.set("result", options.result);
+  const query = params.toString();
+  const path = `/api/online/profiles/${encodeURIComponent(displayName)}/games`;
+  return query ? `${path}?${query}` : path;
+}
+
+export async function fetchOnlinePublicProfileGames(
+  displayName: string,
+  options: FetchOnlinePublicProfileGamesOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameDirectoryResponse> {
+  const response = await fetchImpl(buildOnlinePublicProfileGamesPath(displayName, options));
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch public profile games (${response.status})`);
+  }
+
+  const body = await response.json();
+  const validation = validateOnlineGameDirectoryResponse(body);
+  if (!validation.ok) {
+    throw new Error(`Public profile games response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
+}
+
 export interface FetchOnlineAccountGamesOptions {
   state?: OnlineGameDirectoryState;
   limit?: number;

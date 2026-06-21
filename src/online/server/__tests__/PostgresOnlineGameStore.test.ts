@@ -490,6 +490,9 @@ class FakePostgresClient {
           | undefined;
         const identityKind = identityFilter?.participants?.[0]?.identity?.kind;
         const identityId = identityFilter?.participants?.[0]?.identity?.id;
+        if (/visibility\s*=\s*'public'/i.test(text)) {
+          rows = rows.filter((row) => (row.payload as { visibility?: string }).visibility === "public");
+        }
         rows = rows.filter((row) => {
           const payload = row.payload as {
             participants?: Array<{ seat?: string; identity?: { kind?: string; id?: string; displayName?: string } }>;
@@ -2846,6 +2849,93 @@ describe("PostgresOnlineGameStore", () => {
     expect(page.games.map((summary) => summary.gameId)).toEqual(["game_timeout_result"]);
     const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
     expect(query?.values).toContain("%black wins on time%");
+  });
+
+  it("lists public profile game summaries by participant identity without display-name search", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const samir = { kind: "registered", id: "account_samir", displayName: "Samir" } as const;
+    const liam = { kind: "registered", id: "account_liam", displayName: "Liam" } as const;
+    const collision = { kind: "registered", id: "account_collision", displayName: "Samir" } as const;
+    const matchingParticipants = [
+      { seat: "w" as const, role: "white" as const, identity: samir },
+      { seat: "b" as const, role: "black" as const, identity: liam },
+    ];
+    client.summaryRows = [
+      {
+        payload: createSummary("game_private_profile_hidden", {
+          visibility: "private",
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:06:00.000Z",
+          updatedAt: "2026-05-31T12:06:00.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: matchingParticipants,
+        }),
+      },
+      {
+        payload: createSummary("game_active_profile_hidden", {
+          visibility: "public",
+          updatedAt: "2026-05-31T12:05:00.000Z",
+          participants: matchingParticipants,
+        }),
+      },
+      {
+        payload: createSummary("game_public_profile_collision", {
+          visibility: "public",
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:04:00.000Z",
+          updatedAt: "2026-05-31T12:04:00.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: [
+            { seat: "w" as const, role: "white" as const, identity: collision },
+            { seat: "b" as const, role: "black" as const, identity: liam },
+          ],
+        }),
+      },
+      {
+        payload: createSummary("game_public_profile_match", {
+          visibility: "public",
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:03:00.000Z",
+          updatedAt: "2026-05-31T12:03:00.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: matchingParticipants,
+        }),
+      },
+    ];
+
+    const page = await store.listPublicProfileGameSummaries({
+      identity: samir,
+      visibility: "public",
+      state: "archived",
+      limit: 10,
+      clock: "casual",
+      rating: "rated",
+      result: "resignation",
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual(["game_public_profile_match"]);
+    expect(page.nextCursor).toBeUndefined();
+    const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
+    expect(query?.text).toMatch(/visibility\s*=\s*'public'/i);
+    expect(query?.text).toMatch(/payload\s*@>\s*\$1::jsonb/i);
+    expect(query?.text).not.toMatch(/LOWER\(game_id\)\s+LIKE/i);
+    expect(query?.text).not.toMatch(/identity'->>'displayName'/i);
+    expect(query?.values?.[0]).toEqual({
+      participants: [{ identity: { kind: "registered", id: "account_samir" } }],
+    });
+    expect(query?.values).toContainEqual({ hasTimeControl: false });
+    expect(query?.values).toContain("rated");
+    expect(query?.values).toContainEqual({ result: { reason: "resignation" } });
   });
 
   it("lists personal game summaries by participant identity across private and public visibility", async () => {

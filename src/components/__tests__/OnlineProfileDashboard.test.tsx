@@ -68,6 +68,17 @@ function publicGame(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSumma
   };
 }
 
+function unrelatedPublicGame(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
+  return publicGame({
+    gameId: "game_public_ada_jules",
+    participants: [
+      { seat: "w", role: "white", identity: { kind: "registered", id: "account_ada", displayName: "Ada" } },
+      { seat: "b", role: "black", identity: { kind: "registered", id: "account_jules", displayName: "Jules" } },
+    ],
+    ...overrides,
+  });
+}
+
 describe("OnlineProfileDashboard", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
@@ -167,7 +178,7 @@ describe("OnlineProfileDashboard", () => {
 
     expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
     expect(screen.getByText("Profile Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Rating 1620?")).toBeInTheDocument();
+    expect(await screen.findByText("Rating 1620?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Summary" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Games" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rating" })).toBeInTheDocument();
@@ -495,7 +506,7 @@ describe("OnlineProfileDashboard", () => {
     const loadAccountGames = vi.fn();
     const loadPublicProfileGames = vi.fn().mockResolvedValue({
       schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
-      games: [publicGame()],
+      games: [unrelatedPublicGame(), publicGame()],
     });
     const loadPublicProfileRatingHistory = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -503,19 +514,19 @@ describe("OnlineProfileDashboard", () => {
       points: [
         {
           schemaVersion: 1,
-          rating: 1510,
-          display: "1510",
-          provisional: false,
-          games: 18,
-          appliedAt: "2026-06-14T12:00:00.000Z",
-        },
-        {
-          schemaVersion: 1,
           rating: 1502,
           display: "1502",
           provisional: false,
           games: 17,
           appliedAt: "2026-06-13T12:00:00.000Z",
+        },
+        {
+          schemaVersion: 1,
+          rating: 1510,
+          display: "1510",
+          provisional: false,
+          games: 18,
+          appliedAt: "2026-06-14T12:00:00.000Z",
         },
       ],
     });
@@ -553,12 +564,24 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.queryByText("Status hidden")).not.toBeInTheDocument();
     expect(screen.getAllByText("18 rated games").length).toBeGreaterThanOrEqual(2);
     expect(await screen.findByRole("img", { name: "Public rating history graph" })).toBeInTheDocument();
-    expect(container.querySelector(".online-profile-rating-chart polyline")).toBeInTheDocument();
+    const ratingLine = container.querySelector(".online-profile-rating-chart polyline");
+    expect(ratingLine).toBeInTheDocument();
+    const plottedPoints = ratingLine?.getAttribute("points")?.split(" ").map((point) => {
+      const [, y] = point.split(",").map(Number);
+      return y;
+    }) ?? [];
+    expect(plottedPoints.at(-1)).toBeLessThan(plottedPoints[0]);
     expect(screen.getByText("Online status is private for this viewer.")).toBeInTheDocument();
     expect(screen.queryByText("Challenge Inbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Account Sessions")).not.toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "Public games for Samir" })).toHaveTextContent("Samir vs Liam");
+    const publicGamesRegion = await screen.findByRole("region", { name: "Public games for Samir" });
+    expect(publicGamesRegion).toHaveTextContent("Samir vs Liam");
+    expect(publicGamesRegion).not.toHaveTextContent("Ada vs Jules");
     expect(screen.getByText("White wins by resignation")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyze latest public game game_public_samir_liam from Samir profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Challenge Samir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Follow Samir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rematch Samir from game_public_samir_liam" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Analyze replay game_public_samir_liam from Samir public profile" }));
     expect(onReplay).toHaveBeenCalledWith("game_public_samir_liam");
     expect(screen.getByRole("button", { name: "Summary" })).toHaveAttribute("aria-pressed", "true");
@@ -566,6 +589,123 @@ describe("OnlineProfileDashboard", () => {
     expect(loadAccountGames).not.toHaveBeenCalled();
     expect(loadPublicProfileGames).toHaveBeenCalledWith("Samir");
     expect(loadPublicProfileRatingHistory).toHaveBeenCalledWith("Samir");
+  });
+
+  it("shows play-centered public profile actions only when authorized and useful", async () => {
+    const liveGame = publicGame({
+      gameId: "game_live_samir",
+      status: "active",
+      archiveState: "active",
+      endedAt: undefined,
+      result: undefined,
+    });
+    const unrelatedLiveGame = unrelatedPublicGame({
+      gameId: "game_live_ada",
+      status: "active",
+      archiveState: "active",
+      endedAt: undefined,
+      result: undefined,
+    });
+    const onReplay = vi.fn();
+    const onSpectate = vi.fn();
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const onFollowAccount = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: profile("Samir", {
+        relationship: { self: false, following: true, followedBy: false, blocked: false },
+      }),
+    });
+    const onUnfollowAccount = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: profile("Samir", {
+        relationship: { self: false, following: false, followedBy: false, blocked: false },
+      }),
+    });
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Samir"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Samir", {
+            relationship: { self: false, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        loadPublicProfileGames={vi.fn().mockResolvedValue({
+          schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+          games: [unrelatedPublicGame(), publicGame()],
+        })}
+        loadPublicProfileLiveGames={vi.fn().mockResolvedValue({
+          schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+          games: [unrelatedLiveGame, liveGame],
+        })}
+        onReplay={onReplay}
+        onSpectate={onSpectate}
+        onChallengeAccount={onChallengeAccount}
+        onFollowAccount={onFollowAccount}
+        onUnfollowAccount={onUnfollowAccount}
+      />
+    );
+
+    expect(await screen.findByRole("group", { name: "Profile actions for Samir" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch Samir live game game_live_samir" }));
+    expect(onSpectate).toHaveBeenCalledWith("game_live_samir");
+
+    fireEvent.click(screen.getByRole("button", { name: "Analyze latest public game game_public_samir_liam from Samir profile" }));
+    expect(onReplay).toHaveBeenCalledWith("game_public_samir_liam");
+
+    fireEvent.click(screen.getByRole("button", { name: "Challenge Samir" }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Rematch Samir from game_public_samir_liam" }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir", {
+      intent: "rematch",
+      sourceGameId: "game_public_samir_liam",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Follow Samir" }));
+    await waitFor(() => expect(onFollowAccount).toHaveBeenCalledWith("Samir"));
+    expect(await screen.findByText("Following Samir.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unfollow Samir" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unfollow Samir" }));
+    await waitFor(() => expect(onUnfollowAccount).toHaveBeenCalledWith("Samir"));
+    expect(await screen.findByText("Unfollowed Samir.")).toBeInTheDocument();
+  });
+
+  it("does not show public profile actions when the profile fails to load", async () => {
+    render(
+      <OnlineProfileDashboard
+        displayName="Samir"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockRejectedValue(new Error("profile failed"))}
+        loadPublicProfileGames={vi.fn().mockResolvedValue({
+          schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+          games: [publicGame()],
+        })}
+        loadPublicProfileLiveGames={vi.fn().mockResolvedValue({
+          schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+          games: [publicGame({
+            gameId: "game_live_samir",
+            status: "active",
+            archiveState: "active",
+            endedAt: undefined,
+            result: undefined,
+          })],
+        })}
+        onReplay={vi.fn()}
+        onSpectate={vi.fn()}
+        onChallengeAccount={vi.fn()}
+        onFollowAccount={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Profile unavailable.");
+    expect(screen.queryByRole("group", { name: "Profile actions for Samir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Watch Samir live game game_live_samir" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyze latest public game game_public_samir_liam from Samir profile" })).not.toBeInTheDocument();
   });
 
   it("searches players with suggestions and opens a selected public profile", async () => {

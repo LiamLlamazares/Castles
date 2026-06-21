@@ -148,6 +148,7 @@ async function main() {
       loadGameSummaries: () => store.loadSummaries(),
       listGameSummaries: (options) => store.listGameSummaries(options),
       listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
+      listPublicProfileGameSummaries: (options) => store.listPublicProfileGameSummaries(options),
       listAccountRatingHistory: (accountId, limit) => store.listAccountRatingHistory(accountId, limit),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
       loadGameRoomRecord: (gameId) => store.loadGameRoomRecord(gameId),

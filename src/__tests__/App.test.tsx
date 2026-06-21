@@ -1139,6 +1139,66 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Online Challenge")).toBeInTheDocument();
   });
 
+  it("does not interrupt direct public profile links with the first-run introduction", async () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/?profile=Samir");
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/profiles/Samir") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              profile: {
+                schemaVersion: 1,
+                displayName: "Samir",
+                avatar: APP_TEST_PROFILE_AVATAR,
+                rating: {
+                  schemaVersion: 1,
+                  rating: 1510,
+                  display: "1510",
+                  provisional: false,
+                  games: 18,
+                  updatedAt: "2026-06-14T12:00:00.000Z",
+                },
+                presence: { visibility: "hidden", status: null },
+                relationship: { self: false, following: false, followedBy: false, blocked: false },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (
+        path === "/api/online/profiles/Samir/games?state=archived&limit=8" ||
+        path === "/api/online/profiles/Samir/games?state=active&limit=3"
+      ) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, games: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        );
+      }
+      if (path === "/api/online/profiles/Samir/ratings/history?limit=20") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, schemaVersion: 1, points: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        );
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Public Profile")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Samir" })).toBeInTheDocument();
+  });
+
   it("clears stale shared-game URL parameters when configuring a new game", () => {
     render(<App />);
 
@@ -3824,7 +3884,20 @@ describe("App game setup lifecycle", () => {
           )
         );
       }
-      if (path === "/api/online/games?state=archived&limit=8&q=Samir") {
+      if (path === "/api/online/profiles/Samir/games?state=archived&limit=8") {
+        expect(init?.headers).toBeUndefined();
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+              games: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/profiles/Samir/games?state=active&limit=3") {
+        expect(init?.headers).toBeUndefined();
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -3854,6 +3927,10 @@ describe("App game setup lifecycle", () => {
     expect(window.location.href).not.toContain("challengeToken");
     expect(window.location.href).not.toContain("onlineGame=");
     expect(window.location.search).toBe("?profile=Samir");
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input) === "/api/online/profiles/Samir/games?state=active&limit=3" && init === undefined
+    )).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/online/games?"))).toBe(false);
   });
 
   it("polls signed-in account challenges into count-only Online navigation activity", async () => {

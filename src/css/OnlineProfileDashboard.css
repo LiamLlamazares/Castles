@@ -121,6 +121,24 @@
   font-weight: 850;
 }
 
+.online-profile-hero-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: min(520px, 46vw);
+}
+
+.online-profile-action-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: #bababa;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-align: right;
+}
+
 .online-profile-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -587,6 +605,15 @@
     width: 100%;
   }
 
+  .online-profile-hero-actions {
+    max-width: none;
+    justify-content: stretch;
+  }
+
+  .online-profile-action-message {
+    text-align: left;
+  }
+
   .online-profile-search {
     width: 100%;
   }
@@ -641,6 +668,7 @@
 
 [data-theme="light"] .online-profile-kicker,
 [data-theme="light"] .online-profile-panel p,
+[data-theme="light"] .online-profile-action-message,
 [data-theme="light"] .online-profile-settings-form label,
 [data-theme="light"] .online-profile-search label,
 [data-theme="light"] .online-profile-search-results p {

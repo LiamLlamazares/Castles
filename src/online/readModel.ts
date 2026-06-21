@@ -154,6 +154,17 @@ export interface OnlinePersonalGameDirectoryListOptions {
   opponentDisplayNameKey?: string;
 }
 
+export interface OnlinePublicProfileGameDirectoryListOptions {
+  identity: OnlineIdentity;
+  visibility: "public";
+  state: OnlineGameDirectoryState;
+  limit: number;
+  cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineGameDirectoryRatingFilter;
+  result?: OnlineGameDirectoryResultFilter;
+}
+
 export interface OnlineGameDirectoryResponse {
   schemaVersion: typeof ONLINE_GAME_DIRECTORY_SCHEMA_VERSION;
   games: OnlineGameSummary[];
@@ -474,6 +485,39 @@ export function onlineGameSummaryMatchesPersonalDirectoryFilters(
         normalizeOnlineAccountDisplayNameKey(identity.displayName) === options.opponentDisplayNameKey
       );
     });
+  }
+  return true;
+}
+
+export function onlineGameSummaryMatchesPublicProfileDirectoryFilters(
+  summary: OnlineGameSummary,
+  options: OnlinePublicProfileGameDirectoryListOptions
+): boolean {
+  if (summary.visibility !== options.visibility) return false;
+  if (options.state === "active" && summary.status !== "active") return false;
+  if (
+    options.state === "archived" &&
+    (summary.status !== "complete" || summary.archiveState !== "archived")
+  ) {
+    return false;
+  }
+  if (!summary.participants.some((participant) => isSameOnlineIdentity(participant.identity, options.identity))) {
+    return false;
+  }
+  if (options.clock === "timed" && !summary.hasTimeControl) return false;
+  if (options.clock === "casual" && summary.hasTimeControl) return false;
+  if (options.rating && (summary.ratingMode ?? "casual") !== options.rating) return false;
+  if (options.result) {
+    if (!summary.result) return false;
+    if (options.result === "white" && summary.result.winner !== "w") return false;
+    if (options.result === "black" && summary.result.winner !== "b") return false;
+    if (
+      options.result !== "white" &&
+      options.result !== "black" &&
+      summary.result.reason !== options.result
+    ) {
+      return false;
+    }
   }
   return true;
 }

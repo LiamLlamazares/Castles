@@ -691,11 +691,11 @@
 
 .online-browser-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, max-content) minmax(0, 1fr) minmax(220px, 0.45fr);
-  gap: 14px;
+  grid-template-columns: minmax(180px, max-content) minmax(220px, 1fr) auto;
+  gap: 10px;
   align-items: start;
   margin-bottom: 8px;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -754,6 +754,43 @@
   gap: 6px;
   color: #bababa;
   font-size: 0.9rem;
+}
+
+.online-browser-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.online-browser-filter-panel {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.online-browser-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.online-browser-filter-toggle.active {
+  border-color: rgba(116, 199, 151, 0.45);
+  background: rgba(116, 199, 151, 0.14);
+}
+
+.online-browser-filter-active-label {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(116, 199, 151, 0.26);
+  color: #d8ffe7;
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
 .online-browser-control-title {
@@ -1560,6 +1597,19 @@
   color: #bababa;
 }
 
+.online-browser-archive-empty {
+  padding: 4px 0 0;
+}
+
+.online-browser-archive-empty h2 {
+  margin: 0 0 8px;
+}
+
+.online-browser-archive-empty p {
+  margin: 0;
+  color: #bababa;
+}
+
 @media (max-width: 900px) {
   .online-browser-page {
     padding: 20px;
@@ -1661,6 +1711,14 @@
 
   .online-browser-filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .online-browser-toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .online-browser-toolbar-actions .online-browser-button {
+    flex: 1 1 160px;
   }
 
   .online-game-actions {
@@ -1826,6 +1884,7 @@
   .online-browser-online-now,
   .online-browser-online-now-card,
   .online-browser-toolbar,
+  .online-browser-filter-panel,
   .online-browser-quick-match-panel,
   .online-browser-live-stat,
   .online-browser-watch-friends,
@@ -1850,6 +1909,17 @@
   border-color: #d9d9d9;
   background: #ffffff;
   color: #1f1f1f;
+}
+
+[data-theme="light"] .online-browser-page .online-browser-filter-toggle.active {
+  border-color: rgba(98, 153, 36, 0.55);
+  background: #e8f4de;
+  color: #1d2d13;
+}
+
+[data-theme="light"] .online-browser-page .online-browser-filter-active-label {
+  background: #d4e9c6;
+  color: #1d2d13;
 }
 
 [data-theme="light"] .online-browser-page .online-browser-tabs button.active {

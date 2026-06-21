@@ -36,11 +36,13 @@ import {
   type OnlineGameDirectoryListOptions,
   type OnlineGameDirectoryResponse,
   type OnlinePersonalGameDirectoryListOptions,
+  type OnlinePublicProfileGameDirectoryListOptions,
   type OnlineIdentity,
   OnlineGameSummary,
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
   onlineGameSummaryMatchesPersonalDirectoryFilters,
+  onlineGameSummaryMatchesPublicProfileDirectoryFilters,
   projectOnlineGameSummaries,
   stripOnlineGameSummaryResponseOnlyFields,
   validateOnlineIdentity,
@@ -456,6 +458,107 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
     if (summaries.some((summary) => !onlineGameSummaryMatchesPersonalDirectoryFilters(summary, options))) {
       throw new Error("Personal online game summary query returned an unauthorized row.");
+    }
+    const games = summaries.slice(0, options.limit);
+    const nextCursor =
+      summaries.length > options.limit && games.length > 0
+        ? encodeOnlineGameDirectoryCursor(games[games.length - 1])
+        : undefined;
+
+    return {
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games,
+      nextCursor,
+    };
+  }
+
+  async listPublicProfileGameSummaries(
+    options: OnlinePublicProfileGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse> {
+    await this.ensureSchema();
+    const identity = validateOnlineIdentity(options.identity, "public profile game identity");
+    if (!identity.ok) {
+      throw new Error(identity.error.message);
+    }
+
+    const identityFilter = {
+      participants: [
+        {
+          identity: {
+            kind: identity.value.kind,
+            id: identity.value.id,
+          },
+        },
+      ],
+    };
+    const where: string[] = ["visibility = 'public'", "payload @> $1::jsonb"];
+    const values: unknown[] = [identityFilter];
+    if (options.state === "active") {
+      where.push("status = 'active'");
+    } else if (options.state === "archived") {
+      where.push("status = 'complete'");
+      where.push("archive_state = 'archived'");
+    }
+    if (options.clock === "timed") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: true });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    } else if (options.clock === "casual") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: false });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    }
+    if (options.rating) {
+      const ratingParam = values.length + 1;
+      values.push(options.rating);
+      where.push(`COALESCE(payload->>'ratingMode', 'casual') = $${ratingParam}`);
+    }
+    if (options.result) {
+      const resultParam = values.length + 1;
+      const resultFilter =
+        options.result === "white"
+          ? { result: { winner: "w" } }
+          : options.result === "black"
+            ? { result: { winner: "b" } }
+            : { result: { reason: options.result } };
+      values.push(resultFilter);
+      where.push(`payload @> $${resultParam}::jsonb`);
+    }
+    if (options.cursor) {
+      const cursor = decodeOnlineGameDirectoryCursor(options.cursor);
+      if (!cursor.ok) {
+        throw new Error(cursor.error.message);
+      }
+      const updatedAtParam = values.length + 1;
+      const gameIdParam = values.length + 2;
+      values.push(cursor.value.updatedAt, cursor.value.gameId);
+      where.push(
+        `(updated_at < $${updatedAtParam}::timestamptz OR (updated_at = $${updatedAtParam}::timestamptz AND game_id > $${gameIdParam}))`
+      );
+    }
+
+    const limitParam = values.length + 1;
+    values.push(options.limit + 1);
+    const result = await this.queryable.query(
+      `
+        SELECT payload FROM online_game_summaries
+        WHERE ${where.join(" AND ")}
+        ORDER BY updated_at DESC, game_id ASC
+        LIMIT $${limitParam}
+      `,
+      values
+    );
+    const summaries = result.rows.map((row, index) => {
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(row.payload)
+      );
+      if (!validation.ok) {
+        throw new Error(`Invalid public profile game summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    if (summaries.some((summary) => !onlineGameSummaryMatchesPublicProfileDirectoryFilters(summary, options))) {
+      throw new Error("Public profile game query returned an unauthorized row.");
     }
     const games = summaries.slice(0, options.limit);
     const nextCursor =

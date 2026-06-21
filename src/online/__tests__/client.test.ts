@@ -32,6 +32,7 @@ import {
   fetchOnlineAccountProfile,
   fetchOnlineAccountRatingHistory,
   fetchOnlinePublicProfileRatingHistory,
+  fetchOnlinePublicProfileGames,
   searchOnlineAccountProfiles,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
@@ -86,7 +87,7 @@ import {
   OnlineRequestError,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
-import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
+import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
 import {
   ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -953,6 +954,51 @@ describe("online client helpers", () => {
     });
     await expect(fetchOnlinePublicProfileRatingHistory("Samir", {}, fetchImpl as any))
       .rejects.toThrow(/unsupported field/i);
+  });
+
+  it("fetches public profile games through the participant-scoped profile route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [
+          publicSummary({
+            gameId: "game_samir_profile",
+            updatedAt: "2026-06-19T12:05:00.000Z",
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-06-19T12:05:00.000Z",
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "registered", id: "account_samir", displayName: "Samir" } },
+              { seat: "b", role: "black", identity: { kind: "registered", id: "account_liam", displayName: "Liam" } },
+            ],
+            result: { winner: "w", reason: "resignation" },
+          }),
+        ],
+      }),
+    });
+
+    await expect(
+      fetchOnlinePublicProfileGames(
+        "Samir",
+        {
+          state: "archived",
+          limit: 8,
+          cursor: "cursor_123",
+          clock: "timed",
+          rating: "rated",
+          result: "resignation",
+        },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      games: [{ gameId: "game_samir_profile" }],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/online/profiles/Samir/games?state=archived&limit=8&cursor=cursor_123&clock=timed&rating=rated&result=resignation"
+    );
+    expect(String(fetchImpl.mock.calls[0][0])).not.toContain("q=");
+    expect(fetchImpl.mock.calls[0][1]).toBeUndefined();
   });
 
   it("signs in online accounts with a display name and password", async () => {

@@ -1099,6 +1099,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [seekVpFilter, setSeekVpFilter] = React.useState<OpenSeekVpFilter>("all");
   const [seekRatingFilter, setSeekRatingFilter] = React.useState<OnlineBrowserRatingFilter>("all");
   const [resultFilter, setResultFilter] = React.useState<OnlineBrowserResultFilter>("all");
+  const [filterPanelOpenByTab, setFilterPanelOpenByTab] = React.useState<Record<OnlineBrowserTab, boolean>>({
+    lobby: false,
+    watch: false,
+    archive: false,
+  });
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [nextCursor, setNextCursor] = React.useState<string | undefined>();
@@ -2393,6 +2398,34 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     ratingFilter !== "all" ||
     friendFilterActive ||
     (tab === "archive" && resultFilter !== "all");
+  const hasActiveSeekFieldFilters =
+    seekSideFilter !== "all" ||
+    seekClockFilter !== "all" ||
+    seekVpFilter !== "all" ||
+    seekRatingFilter !== "all" ||
+    friendFilterActive;
+  const hasActiveGameFieldFilters =
+    timeFilter !== "all" ||
+    ratingFilter !== "all" ||
+    friendFilterActive ||
+    (tab === "archive" && resultFilter !== "all");
+  const hasActiveFilterPanelControls = tab === "lobby" ? hasActiveSeekFieldFilters : hasActiveGameFieldFilters;
+  const filterPanelOpen = filterPanelOpenByTab[tab] || hasActiveFilterPanelControls;
+  const filterToggleLabel = hasActiveFilterPanelControls
+    ? "Filters active"
+    : filterPanelOpen
+      ? "Hide filters"
+      : "Show filters";
+  const filterStatusLabel = hasActiveFilterPanelControls
+    ? "One or more filters are active"
+    : "No filters active";
+  const filterPanelId = `online-browser-${tab}-filters`;
+  const toggleFilterPanel = () => {
+    setFilterPanelOpenByTab((current) => ({
+      ...current,
+      [tab]: !filterPanelOpen,
+    }));
+  };
   const gameSearchAriaLabel =
     tab === "lobby"
       ? "Search lobby listings"
@@ -2407,6 +2440,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         : "Player, game id, result, or move";
   const gameBrowseControlsLabel =
     tab === "watch" ? "Browse live public games" : "Browse online archive";
+  const filterPanelLabel = tab === "lobby" ? "Find lobby listings" : gameBrowseControlsLabel;
   const gameSortAriaLabel = tab === "archive" ? "Sort archive games" : "Sort public games";
   const accountArchiveStatusLabel =
     account && accountGamesStatus === "loading"
@@ -4948,7 +4982,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </section>
       )}
 
-      <section className={`online-browser-toolbar online-browser-toolbar-${tab}`} aria-label="Online browser controls">
+      <section
+        className={`online-browser-toolbar online-browser-toolbar-${tab} ${filterPanelOpen ? "filters-open" : "filters-closed"}`}
+        aria-label="Online browser controls"
+      >
         <div className="online-browser-tabs" role="group" aria-label="Online game lists">
           <button
             type="button"
@@ -4979,162 +5016,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             Archive
           </button>
         </div>
-        {tab === "lobby" ? (
-          <div className="online-browser-filter-panel" role="group" aria-label="Find lobby listings">
-            <div className="online-browser-control-title">Find lobby listings</div>
-            <div className="online-browser-filter-grid">
-              <label className="online-browser-select">
-                <span>Creator side</span>
-                <select
-                  aria-label="Lobby creator side filter"
-                  value={seekSideFilter}
-                  onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
-                >
-                  <option value="all">All creator sides</option>
-                  <option value="random">Random</option>
-                  <option value="w">White</option>
-                  <option value="b">Black</option>
-                </select>
-              </label>
-              <label className="online-browser-select">
-                <span>Clock</span>
-                <select
-                  aria-label="Lobby clock filter"
-                  value={seekClockFilter}
-                  onChange={(event) => setSeekClockFilter(event.currentTarget.value as OpenSeekClockFilter)}
-                >
-                  <option value="all">All clocks</option>
-                  <option value="timed">Timed</option>
-                  <option value="casual">Casual</option>
-                </select>
-              </label>
-              <label className="online-browser-select">
-                <span>Scoring</span>
-                <select
-                  aria-label="Lobby scoring filter"
-                  value={seekVpFilter}
-                  onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
-                >
-                  <option value="all">All scoring</option>
-                  <option value="enabled">Victory points</option>
-                  <option value="disabled">Castle control</option>
-                </select>
-              </label>
-              <label className="online-browser-select">
-                <span>Rating</span>
-                <select
-                  aria-label="Lobby rating filter"
-                  value={seekRatingFilter}
-                  onChange={(event) => setSeekRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
-                >
-                  <option value="all">All ratings</option>
-                  <option value="casual">Casual</option>
-                  <option value="rated">Rated</option>
-                </select>
-              </label>
-              {canUseAccountSocial && (
-                <label className="online-browser-select">
-                  <span>People</span>
-                  <select
-                    aria-label="Followed players filter"
-                    value={friendFilter}
-                    onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
-                  >
-                    <option value="all">All players</option>
-                    <option value="followed" disabled={followingStatus !== "ready"}>
-                      Followed players only
-                    </option>
-                  </select>
-                </label>
-              )}
-              <button
-                type="button"
-                className="online-browser-button neutral"
-                onClick={() => void loadOpenSeekPage({ background: false })}
-                disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
-                aria-label="Refresh lobby listings"
-              >
-                {seekStatus === "loading" ? "Refreshing..." : "Refresh listings"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="online-browser-filter-panel" role="group" aria-label={gameBrowseControlsLabel}>
-            <div className="online-browser-control-title">{tab === "watch" ? "Browse live games" : "Browse archive"}</div>
-            <div className="online-browser-filter-grid">
-              <label className="online-browser-select">
-                <span>Sort</span>
-                <select
-                  aria-label={gameSortAriaLabel}
-                  value={tab === "archive" && sort === "watchers" ? "newest" : sort}
-                  onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
-                >
-                  <option value="newest">Newest</option>
-                  <option value="moves">Most moves</option>
-                  {tab === "watch" && <option value="watchers">Most watched in current list</option>}
-                </select>
-              </label>
-              <label className="online-browser-select">
-                <span>Clock</span>
-                <select
-                  aria-label="Time control filter"
-                  value={timeFilter}
-                  onChange={(event) => setTimeFilter(event.currentTarget.value as OnlineBrowserTimeFilter)}
-                >
-                  <option value="all">All clocks</option>
-                  <option value="timed">Timed</option>
-                  <option value="casual">Casual</option>
-                </select>
-              </label>
-              <label className="online-browser-select">
-                <span>Rating</span>
-                <select
-                  aria-label="Rating filter"
-                  value={ratingFilter}
-                  onChange={(event) => setRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
-                >
-                  <option value="all">All ratings</option>
-                  <option value="casual">Casual</option>
-                  <option value="rated">Rated</option>
-                </select>
-              </label>
-              {canUseAccountSocial && (
-                <label className="online-browser-select">
-                  <span>People</span>
-                  <select
-                    aria-label="Followed players filter"
-                    value={friendFilter}
-                    onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
-                  >
-                    <option value="all">All players</option>
-                    <option value="followed" disabled={followingStatus !== "ready"}>
-                      Followed players only
-                    </option>
-                  </select>
-                </label>
-              )}
-              {tab === "archive" && (
-                <label className="online-browser-select">
-                  <span>Result</span>
-                  <select
-                    aria-label="Result filter"
-                    value={resultFilter}
-                    onChange={(event) => setResultFilter(event.currentTarget.value as OnlineBrowserResultFilter)}
-                  >
-                    <option value="all">All results</option>
-                    <option value="white">White wins</option>
-                    <option value="black">Black wins</option>
-                    <option value="resignation">Resignation</option>
-                    <option value="timeout">Timeout</option>
-                    <option value="castle_control">Castle control</option>
-                    <option value="victory_points">Victory points</option>
-                    <option value="monarch_captured">Monarch captured</option>
-                  </select>
-                </label>
-              )}
-            </div>
-          </div>
-        )}
         <label className="online-browser-search">
           <span>Search</span>
           <input
@@ -5147,6 +5028,189 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             placeholder={gameSearchPlaceholder}
           />
         </label>
+        <div className="online-browser-toolbar-actions" role="group" aria-label={`${tab} controls`}>
+          <button
+            type="button"
+            className={`online-browser-button subtle online-browser-filter-toggle ${hasActiveFilterPanelControls ? "active" : ""}`}
+            onClick={toggleFilterPanel}
+            aria-expanded={filterPanelOpen}
+            aria-controls={filterPanelId}
+            aria-label={`${filterToggleLabel}. ${filterStatusLabel}`}
+          >
+            <span>Filters</span>
+            {hasActiveFilterPanelControls && <span className="online-browser-filter-active-label">Active</span>}
+          </button>
+          {tab === "lobby" ? (
+            <button
+              type="button"
+              className="online-browser-button neutral"
+              onClick={() => void loadOpenSeekPage({ background: false })}
+              disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
+              aria-label="Refresh lobby listings"
+            >
+              {seekStatus === "loading" ? "Refreshing..." : "Refresh listings"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="online-browser-button neutral"
+              onClick={refreshGames}
+              disabled={status === "loading"}
+              aria-label={tab === "archive" ? "Refresh online archive" : "Refresh live public games"}
+            >
+              {status === "loading" ? "Refreshing..." : tab === "archive" ? "Refresh archive" : "Refresh games"}
+            </button>
+          )}
+        </div>
+        {filterPanelOpen && (
+          tab === "lobby" ? (
+            <div id={filterPanelId} className="online-browser-filter-panel" role="group" aria-label="Find lobby listings">
+              <div className="online-browser-control-title">Listing filters</div>
+              <div className="online-browser-filter-grid">
+                <label className="online-browser-select">
+                  <span>Creator side</span>
+                  <select
+                    aria-label="Lobby creator side filter"
+                    value={seekSideFilter}
+                    onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
+                  >
+                    <option value="all">All creator sides</option>
+                    <option value="random">Random</option>
+                    <option value="w">White</option>
+                    <option value="b">Black</option>
+                  </select>
+                </label>
+                <label className="online-browser-select">
+                  <span>Clock</span>
+                  <select
+                    aria-label="Lobby clock filter"
+                    value={seekClockFilter}
+                    onChange={(event) => setSeekClockFilter(event.currentTarget.value as OpenSeekClockFilter)}
+                  >
+                    <option value="all">All clocks</option>
+                    <option value="timed">Timed</option>
+                    <option value="casual">Casual</option>
+                  </select>
+                </label>
+                <label className="online-browser-select">
+                  <span>Scoring</span>
+                  <select
+                    aria-label="Lobby scoring filter"
+                    value={seekVpFilter}
+                    onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
+                  >
+                    <option value="all">All scoring</option>
+                    <option value="enabled">Victory points</option>
+                    <option value="disabled">Castle control</option>
+                  </select>
+                </label>
+                <label className="online-browser-select">
+                  <span>Rating</span>
+                  <select
+                    aria-label="Lobby rating filter"
+                    value={seekRatingFilter}
+                    onChange={(event) => setSeekRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
+                  >
+                    <option value="all">All ratings</option>
+                    <option value="casual">Casual</option>
+                    <option value="rated">Rated</option>
+                  </select>
+                </label>
+                {canUseAccountSocial && (
+                  <label className="online-browser-select">
+                    <span>People</span>
+                    <select
+                      aria-label="Followed players filter"
+                      value={friendFilter}
+                      onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
+                    >
+                      <option value="all">All players</option>
+                      <option value="followed" disabled={followingStatus !== "ready"}>
+                        Followed players only
+                      </option>
+                    </select>
+                  </label>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div id={filterPanelId} className="online-browser-filter-panel" role="group" aria-label={filterPanelLabel}>
+              <div className="online-browser-control-title">{tab === "watch" ? "Live-game filters" : "Archive filters"}</div>
+              <div className="online-browser-filter-grid">
+                <label className="online-browser-select">
+                  <span>Sort</span>
+                  <select
+                    aria-label={gameSortAriaLabel}
+                    value={tab === "archive" && sort === "watchers" ? "newest" : sort}
+                    onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="moves">Most moves</option>
+                    {tab === "watch" && <option value="watchers">Most watched in current list</option>}
+                  </select>
+                </label>
+                <label className="online-browser-select">
+                  <span>Clock</span>
+                  <select
+                    aria-label="Time control filter"
+                    value={timeFilter}
+                    onChange={(event) => setTimeFilter(event.currentTarget.value as OnlineBrowserTimeFilter)}
+                  >
+                    <option value="all">All clocks</option>
+                    <option value="timed">Timed</option>
+                    <option value="casual">Casual</option>
+                  </select>
+                </label>
+                <label className="online-browser-select">
+                  <span>Rating</span>
+                  <select
+                    aria-label="Rating filter"
+                    value={ratingFilter}
+                    onChange={(event) => setRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
+                  >
+                    <option value="all">All ratings</option>
+                    <option value="casual">Casual</option>
+                    <option value="rated">Rated</option>
+                  </select>
+                </label>
+                {canUseAccountSocial && (
+                  <label className="online-browser-select">
+                    <span>People</span>
+                    <select
+                      aria-label="Followed players filter"
+                      value={friendFilter}
+                      onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
+                    >
+                      <option value="all">All players</option>
+                      <option value="followed" disabled={followingStatus !== "ready"}>
+                        Followed players only
+                      </option>
+                    </select>
+                  </label>
+                )}
+                {tab === "archive" && (
+                  <label className="online-browser-select">
+                    <span>Result</span>
+                    <select
+                      aria-label="Result filter"
+                      value={resultFilter}
+                      onChange={(event) => setResultFilter(event.currentTarget.value as OnlineBrowserResultFilter)}
+                    >
+                      <option value="all">All results</option>
+                      <option value="white">White wins</option>
+                      <option value="black">Black wins</option>
+                      <option value="resignation">Resignation</option>
+                      <option value="timeout">Timeout</option>
+                      <option value="castle_control">Castle control</option>
+                      <option value="victory_points">Victory points</option>
+                      <option value="monarch_captured">Monarch captured</option>
+                    </select>
+                  </label>
+                )}
+              </div>
+            </div>
+          )
+        )}
       </section>
 
       {canUseAccountSocial && friendFilter === "followed" && (
@@ -5531,15 +5595,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   >
                     Open Watch
                   </button>
-                  <button
-                    type="button"
-                    className="online-browser-button subtle"
-                    onClick={refreshGames}
-                    disabled={status === "loading"}
-                    aria-label="Refresh live public games"
-                  >
-                    {status === "loading" ? "Refreshing..." : "Refresh live games"}
-                  </button>
                 </div>
               </div>
               {renderLiveOverview(filteredPublicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
@@ -5585,15 +5640,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     : copyMessage || `${visibleGames.length} public games shown`}
                 </p>
               </div>
-              <button
-                type="button"
-                className="online-browser-button subtle"
-                onClick={refreshGames}
-                disabled={status === "loading"}
-                aria-label="Refresh live public games"
-              >
-                {status === "loading" ? "Refreshing..." : "Refresh live games"}
-              </button>
             </div>
             {renderLiveOverview(
               friendFilterActive ? visibleGames.length : publicActiveGames.length,
@@ -5662,7 +5708,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     ? "Refresh live games, load more when available, or follow players from People."
                     : hasActiveFilters
                     ? "Try a different search or clock setting."
-                    : "Accepted public lobby games appear here automatically. Private and unlisted games stay off this page."}
+                    : "Open Lobby to start a public game, or check Archive for completed replays. Private and unlisted games stay off this page."}
                 </p>
               </section>
             ) : (
@@ -5898,7 +5944,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <span>{formatCount(visibleGames.length, "replay")}</span>
               </div>
               {visibleGames.length === 0 && status === "ready" ? (
-                <section className="online-browser-empty">
+                <section className="online-browser-archive-empty">
                   <h2>{friendFilterActive ? "No loaded public replays include followed players." : hasActiveFilters ? "No public replays match these filters." : emptyTitle}</h2>
                   <p>
                     {friendFilterActive

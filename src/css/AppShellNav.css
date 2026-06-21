@@ -237,6 +237,18 @@
 
   .app-shell-nav {
     gap: 7px;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .app-shell-nav-actions {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .app-shell-nav-actions > * {
+    width: 100%;
   }
 
   .app-shell-back-button,

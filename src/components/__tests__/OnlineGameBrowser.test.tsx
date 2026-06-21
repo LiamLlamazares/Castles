@@ -134,6 +134,13 @@ function seekDirectory(
   };
 }
 
+function openOnlineFilters() {
+  const filters = screen.getByRole("button", { name: /filters/i });
+  if (filters.getAttribute("aria-expanded") !== "true") {
+    fireEvent.click(filters);
+  }
+}
+
 function accountChallengeSummary(
   overrides: Partial<OnlineChallengeSummary> = {}
 ): OnlineChallengeSummary {
@@ -3318,6 +3325,7 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("seek_followed_creator")).toBeInTheDocument();
     expect(await screen.findByText("game_other_live")).toBeInTheDocument();
 
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -3369,6 +3377,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     expect(await screen.findByText("seek_page_one_other")).toBeInTheDocument();
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -3459,6 +3468,7 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("game_watch_followed")).toBeInTheDocument();
     expect(await screen.findByText("game_watch_registered_other")).toBeInTheDocument();
 
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -3512,6 +3522,7 @@ describe("OnlineGameBrowser", () => {
     expect(strip).toHaveTextContent("Samir");
     expect(within(strip).queryByText("Ada")).not.toBeInTheDocument();
     expect(within(strip).queryByText("Kai")).not.toBeInTheDocument();
+    openOnlineFilters();
     expect(screen.getByRole("combobox", { name: "Followed players filter" })).toHaveValue("all");
 
     fireEvent.click(within(strip).getByRole("button", {
@@ -3935,6 +3946,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     expect(await screen.findByText("game_following_failure_other")).toBeInTheDocument();
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -4049,6 +4061,7 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear game history filter for Samir" }));
     await waitFor(() => expect(search).toHaveValue(""));
 
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -4096,6 +4109,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     expect(await screen.findByText("game_other_after_signout")).toBeInTheDocument();
+    openOnlineFilters();
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
     fireEvent.change(filter, { target: { value: "followed" } });
@@ -4242,6 +4256,7 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(loadAccountGames).toHaveBeenLastCalledWith({ state: "all", limit: 50 }));
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
       target: { value: "casual" },
     });
@@ -4715,7 +4730,86 @@ describe("OnlineGameBrowser", () => {
     expect(within(currentGames).getByText("game_lobby_live")).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Open Watch tab" })).toBeInTheDocument();
-    expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
+    expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toHaveTextContent("Refresh listings");
+  });
+
+  it("keeps Online filters secondary until requested or active", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("No lobby listings yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show filters. No filters active" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.queryByRole("combobox", { name: "Lobby creator side filter" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toBeInTheDocument();
+
+    openOnlineFilters();
+    const creatorSide = screen.getByRole("combobox", { name: "Lobby creator side filter" });
+    fireEvent.change(creatorSide, { target: { value: "w" } });
+
+    expect(screen.getByRole("button", { name: "Filters active. One or more filters are active" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(screen.getByRole("combobox", { name: "Lobby creator side filter" })).toHaveValue("w");
+  });
+
+  it("keeps Watch and Archive filters secondary until requested or active", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("No public games in progress.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show filters. No filters active" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.queryByRole("combobox", { name: "Sort public games" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh games");
+
+    openOnlineFilters();
+    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
+      target: { value: "casual" },
+    });
+
+    expect(screen.getByRole("button", { name: "Filters active. One or more filters are active" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(screen.getByRole("combobox", { name: "Time control filter" })).toHaveValue("casual");
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+
+    expect(await screen.findByText("No public replays match these filters.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filters active. One or more filters are active" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(screen.getByRole("combobox", { name: "Sort archive games" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh online archive" })).toHaveTextContent("Refresh archive");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "white" },
+    });
+    expect(screen.getByRole("combobox", { name: "Result filter" })).toHaveValue("white");
   });
 
   it("shows safe registered Lobby creators and opens their profiles", async () => {
@@ -4828,6 +4922,7 @@ describe("OnlineGameBrowser", () => {
       "game_many_moves_fewer_watchers"
     );
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
       target: { value: "watchers" },
     });
@@ -4882,6 +4977,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_many_moves_no_watchers");
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
       target: { value: "watchers" },
     });
@@ -4967,6 +5063,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_six_watchers");
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
       target: { value: "watchers" },
     });
@@ -5026,6 +5123,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("seek_before_filter");
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Lobby creator side filter" }), {
       target: { value: "w" },
     });
@@ -5865,6 +5963,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("seek_initial");
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Lobby creator side filter" }), {
       target: { value: "w" },
     });
@@ -6551,6 +6650,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(await screen.findByText("No public completed games yet.")).toBeInTheDocument();
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
       target: { value: "casual" },
     });
@@ -6886,6 +6986,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_newest_few_moves");
 
+    openOnlineFilters();
     expect(screen.getByRole("combobox", { name: "Sort public games" })).toHaveValue("newest");
     const selectedRegion = screen.getByRole("region", {
       name: "Current public live selection by most moves in current list",
@@ -7051,6 +7152,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("game_live_with_watchers");
+    openOnlineFilters();
     const watchSort = screen.getByRole("combobox", { name: "Sort public games" });
     fireEvent.change(watchSort, { target: { value: "watchers" } });
     expect(watchSort).toHaveValue("watchers");
@@ -7058,6 +7160,7 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
 
     await screen.findByText("game_public_archive_no_watchers");
+    openOnlineFilters();
     const archiveSort = screen.getByRole("combobox", { name: "Sort archive games" });
     expect(archiveSort).toHaveValue("newest");
     expect(screen.queryByRole("option", { name: "Most watched in current list" })).not.toBeInTheDocument();
@@ -7134,6 +7237,7 @@ describe("OnlineGameBrowser", () => {
     const filteredRecent = await screen.findByRole("region", { name: "Recent online games on this device" });
     expect(filteredRecent).toHaveTextContent("game_unlisted_finished");
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
       target: { value: "white" },
     });
@@ -7299,6 +7403,7 @@ describe("OnlineGameBrowser", () => {
     expect(sideRows[0]).toHaveTextContent("game_newer_few_moves");
     expect(sideRows[1]).toHaveTextContent("game_middle_moves");
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
       target: { value: "moves" },
     });
@@ -7342,6 +7447,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_white_archive");
 
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
       target: { value: "black" },
     });
@@ -7380,6 +7486,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("game_black_archive");
+    openOnlineFilters();
     fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
       target: { value: "black" },
     });
@@ -7390,6 +7497,7 @@ describe("OnlineGameBrowser", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
 
+    openOnlineFilters();
     await waitFor(() => {
       expect(screen.getByRole("combobox", { name: "Result filter" })).toHaveValue("all");
     });

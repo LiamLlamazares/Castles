@@ -58,6 +58,7 @@ import {
   fetchOnlineAccountProfile,
   fetchOnlineAccountRatingHistory,
   fetchOnlinePublicProfile,
+  fetchOnlinePublicProfileGames,
   fetchOnlinePublicProfileRatingHistory,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
@@ -707,14 +708,14 @@ function App() {
   }, [loadOnlineChallengeNavigationActivityCount, onlineAccountAuth, onlineAccountStatus]);
 
   useEffect(() => {
-    if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
+    if (isRulesPage || view === "profile" || onlineJoin || onlineSpectator || onlineChallenge) return;
     try {
       if (localStorage.getItem(FIRST_RUN_INTRO_STORAGE_KEY) === "true") return;
     } catch {
       // If storage is unavailable, still show the one-session introduction.
     }
     setIsFirstRunIntroOpen(true);
-  }, [isRulesPage, onlineJoin, onlineSpectator, onlineChallenge]);
+  }, [isRulesPage, view, onlineJoin, onlineSpectator, onlineChallenge]);
 
   useEffect(() => {
     const root = appRootRef.current;
@@ -1612,10 +1613,16 @@ function App() {
   }, [onlineAccount?.displayName, onlineAccountSession?.token]);
 
   const handleLoadPublicProfileGames = useCallback((displayName: string) => {
-    return fetchOnlineGameDirectory({
+    return fetchOnlinePublicProfileGames(displayName, {
       state: "archived",
       limit: 8,
-      query: displayName,
+    });
+  }, []);
+
+  const handleLoadPublicProfileLiveGames = useCallback((displayName: string) => {
+    return fetchOnlinePublicProfileGames(displayName, {
+      state: "active",
+      limit: 3,
     });
   }, []);
 
@@ -3199,6 +3206,7 @@ function App() {
           loadProfile={handleLoadProfileDashboardProfile}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
           loadPublicProfileGames={handleLoadPublicProfileGames}
+          loadPublicProfileLiveGames={handleLoadPublicProfileLiveGames}
           loadPublicProfileRatingHistory={handleLoadPublicProfileRatingHistory}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
           loadAccountRatingHistory={onlineAccountSession ? handleLoadOnlineAccountRatingHistory : undefined}
@@ -3213,6 +3221,10 @@ function App() {
           searchProfiles={handleSearchOnlineAccountProfiles}
           onOpenProfile={handleOpenProfile}
           onReplay={handleReplayOnlineGame}
+          onSpectate={handleSpectateOnlineGame}
+          onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
+          onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
+          onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
           onOpenGame={handleOpenGame}

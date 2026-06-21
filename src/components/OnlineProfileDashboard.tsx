@@ -41,6 +41,7 @@ import type { OnlineGameDirectoryResponse, OnlineGameSummary } from "../online/r
 import "../css/OnlineProfileDashboard.css";
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
+type ProfileActionStatus = "idle" | "follow" | "unfollow" | "challenge" | "rematch";
 type ProfileSectionId = "summary" | "games" | "rating" | "people" | "settings";
 
 const SELF_PROFILE_SECTIONS: Array<{ id: ProfileSectionId; label: string }> = [
@@ -83,6 +84,7 @@ interface OnlineProfileDashboardProps {
   loadProfile: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadPublicProfileGames?: (displayName: string) => Promise<OnlineGameDirectoryResponse>;
+  loadPublicProfileLiveGames?: (displayName: string) => Promise<OnlineGameDirectoryResponse>;
   loadPublicProfileRatingHistory?: (displayName: string) => Promise<OnlineAccountPublicRatingHistoryResponse>;
   loadAccountChallenges?: (
     options?: FetchOnlineAccountChallengesOptions
@@ -99,6 +101,13 @@ interface OnlineProfileDashboardProps {
   searchProfiles?: (query: string) => Promise<OnlineAccountSearchResponse>;
   onOpenProfile?: (displayName: string) => void;
   onReplay?: (gameId: string) => void;
+  onSpectate?: (gameId: string) => void;
+  onChallengeAccount?: (
+    displayName: string,
+    options?: { intent?: "challenge" | "rematch"; sourceGameId?: string }
+  ) => void | Promise<void>;
+  onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  onUnfollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onBack?: () => void;
   backLabel?: string;
   onOpenGame?: () => void;
@@ -202,6 +211,16 @@ function publicGameTitle(game: OnlineGameSummary): string {
   return `${participantDisplayName(game, "w")} vs ${participantDisplayName(game, "b")}`;
 }
 
+function gameHasRegisteredDisplayName(game: OnlineGameSummary, displayName: string): boolean {
+  const target = displayName.trim().toLowerCase();
+  return game.participants.some((participant) => {
+    return (
+      participant.identity.kind === "registered" &&
+      participant.identity.displayName?.trim().toLowerCase() === target
+    );
+  });
+}
+
 function gameCount(games: OnlineGameSummary[]): string {
   return formatCount(games.length, "game");
 }
@@ -275,6 +294,17 @@ function publicRatingGraphPoints(points: OnlineAccountPublicRatingHistoryPoint[]
     rating: point.rating,
     label: `${point.display} after ${formatCount(point.games, "rated game")}`,
   }));
+}
+
+function comparePublicRatingHistoryPoints(
+  a: OnlineAccountPublicRatingHistoryPoint,
+  b: OnlineAccountPublicRatingHistoryPoint
+): number {
+  const timeDelta = Date.parse(a.appliedAt) - Date.parse(b.appliedAt);
+  if (timeDelta !== 0) return timeDelta;
+  const gamesDelta = a.games - b.games;
+  if (gamesDelta !== 0) return gamesDelta;
+  return a.rating - b.rating;
 }
 
 function RatingLineGraph({
@@ -420,6 +450,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   loadProfile,
   loadAccountGames,
   loadPublicProfileGames,
+  loadPublicProfileLiveGames,
   loadPublicProfileRatingHistory,
   loadAccountChallenges,
   loadAccountRatingHistory,
@@ -434,6 +465,10 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   searchProfiles,
   onOpenProfile,
   onReplay,
+  onSpectate,
+  onChallengeAccount,
+  onFollowAccount,
+  onUnfollowAccount,
   onBack,
   backLabel = "Back",
   onOpenGame,
@@ -450,7 +485,9 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [activeGames, setActiveGames] = React.useState<OnlineGameSummary[]>([]);
   const [completedGames, setCompletedGames] = React.useState<OnlineGameSummary[]>([]);
   const [publicGames, setPublicGames] = React.useState<OnlineGameSummary[]>([]);
+  const [publicLiveGames, setPublicLiveGames] = React.useState<OnlineGameSummary[]>([]);
   const [publicGamesStatus, setPublicGamesStatus] = React.useState<LoadStatus>("idle");
+  const [publicLiveGamesStatus, setPublicLiveGamesStatus] = React.useState<LoadStatus>("idle");
   const [publicRatingHistory, setPublicRatingHistory] = React.useState<OnlineAccountPublicRatingHistoryPoint[]>([]);
   const [publicRatingHistoryStatus, setPublicRatingHistoryStatus] = React.useState<LoadStatus>("idle");
   const [ratingHistory, setRatingHistory] = React.useState<OnlineAccountRatingHistoryEntry[]>([]);
@@ -466,9 +503,11 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [passwordStatus, setPasswordStatus] = React.useState<LoadStatus>("idle");
   const [sessionActionStatus, setSessionActionStatus] = React.useState<LoadStatus>("idle");
   const [deleteAccountStatus, setDeleteAccountStatus] = React.useState<LoadStatus>("idle");
+  const [profileActionStatus, setProfileActionStatus] = React.useState<ProfileActionStatus>("idle");
   const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [settingsMessage, setSettingsMessage] = React.useState("");
   const [settingsMessageTone, setSettingsMessageTone] = React.useState<"status" | "error">("status");
+  const [profileActionMessage, setProfileActionMessage] = React.useState("");
   const [currentPassword, setCurrentPassword] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -477,6 +516,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const profileRequestRef = React.useRef(0);
   const dashboardRequestRef = React.useRef(0);
   const publicGamesRequestRef = React.useRef(0);
+  const publicLiveGamesRequestRef = React.useRef(0);
   const publicRatingHistoryRequestRef = React.useRef(0);
   const searchRequestRef = React.useRef(0);
   const deleteAccountConfirmPanelId = React.useId();
@@ -490,6 +530,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     setProfile(null);
     setAvatarDraft(null);
     setProfileStatus("loading");
+    setProfileActionStatus("idle");
+    setProfileActionMessage("");
     loadProfile(displayName)
       .then((response) => {
         if (requestId !== profileRequestRef.current) return;
@@ -503,6 +545,28 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
         setProfileStatus("error");
       });
   }, [displayName, loadProfile]);
+
+  React.useEffect(() => {
+    const requestId = ++publicLiveGamesRequestRef.current;
+    setPublicLiveGames([]);
+    if (isSelfDashboard || !loadPublicProfileLiveGames) {
+      setPublicLiveGamesStatus("idle");
+      return;
+    }
+    setPublicLiveGamesStatus("loading");
+    loadPublicProfileLiveGames(displayName)
+      .then((response) => {
+        if (requestId !== publicLiveGamesRequestRef.current) return;
+        setPublicLiveGames(response.games);
+        setPublicLiveGamesStatus("ready");
+      })
+      .catch((error) => {
+        if (requestId !== publicLiveGamesRequestRef.current) return;
+        console.error("[OnlineProfileDashboard] Failed to load public live profile games", error);
+        setPublicLiveGames([]);
+        setPublicLiveGamesStatus("error");
+      });
+  }, [displayName, isSelfDashboard, loadPublicProfileLiveGames]);
 
   React.useEffect(() => {
     const section = readProfileSectionFromUrl(isSelfDashboard);
@@ -689,7 +753,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
 
   const ratingText = profile?.rating ? `Rating ${profile.rating.display}` : "Rating unrated";
   const ratedGameText = profile?.rating ? formatCount(profile.rating.games, "rated game") : "0 rated games";
-  const publicRatingHistoryChronological = publicRatingHistory.slice().reverse();
+  const publicRatingHistoryChronological = publicRatingHistory.slice().sort(comparePublicRatingHistoryPoints);
+  const publicRatingHistoryRecent = publicRatingHistoryChronological.slice().reverse();
   const selfRatingChartPoints = selfRatingGraphPoints(ratingHistory);
   const publicRatingChartPoints = publicRatingGraphPoints(publicRatingHistoryChronological);
   const profileSections = isSelfDashboard ? SELF_PROFILE_SECTIONS : PUBLIC_PROFILE_SECTIONS;
@@ -698,6 +763,29 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const showsRatingSection = showsOverviewSection || activeSection === "rating";
   const showsPeopleSection = showsOverviewSection || activeSection === "people";
   const showsSettingsSection = activeSection === "settings";
+  const publicProfileReady = profileStatus === "ready" && !!profile && !isSelfDashboard;
+  const profilePublicGames = publicGames.filter((game) => gameHasRegisteredDisplayName(game, displayName));
+  const profilePublicLiveGames = publicLiveGames.filter((game) => gameHasRegisteredDisplayName(game, displayName));
+  const firstPublicLiveGame = profilePublicLiveGames.find((game) => game.status === "active") ?? null;
+  const latestPublicGame = profilePublicGames[0] ?? null;
+  const sharedCompletedPublicGame =
+    account && !isSelfDashboard
+      ? profilePublicGames.find((game) =>
+          game.status === "complete" &&
+          gameHasRegisteredDisplayName(game, account.displayName)
+        ) ?? null
+      : null;
+  const canUseSignedInPublicActions =
+    Boolean(account && profile && publicProfileReady && !profile.relationship.self && !profile.relationship.blocked);
+  const canFollowProfile = canUseSignedInPublicActions && !!onFollowAccount && !profile?.relationship.following;
+  const canUnfollowProfile = canUseSignedInPublicActions && !!onUnfollowAccount && !!profile?.relationship.following;
+  const canChallengeProfile = canUseSignedInPublicActions && !!onChallengeAccount;
+  const canRematchProfile = canChallengeProfile && !!sharedCompletedPublicGame;
+  const canWatchProfile = publicProfileReady && !!onSpectate && !!firstPublicLiveGame;
+  const canAnalyzeProfile = publicProfileReady && !!onReplay && !!latestPublicGame;
+  const hasPublicProfileActions =
+    publicProfileReady &&
+    (canFollowProfile || canUnfollowProfile || canChallengeProfile || canWatchProfile || canAnalyzeProfile || canRematchProfile);
   const canSubmitPassword =
     !!updateAccountPassword &&
     newPassword.length >= ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH &&
@@ -866,6 +954,57 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     }
   };
 
+  const runPublicProfileAction = async (
+    action: ProfileActionStatus,
+    run: () => Promise<void>,
+    successMessage: string
+  ) => {
+    setProfileActionStatus(action);
+    setProfileActionMessage("");
+    try {
+      await run();
+      setProfileActionMessage(successMessage);
+    } catch (error) {
+      console.error("[OnlineProfileDashboard] Public profile action failed", error);
+      setProfileActionMessage(onlineRequestErrorMessage(error) ?? "Profile action could not be completed.");
+    } finally {
+      setProfileActionStatus("idle");
+    }
+  };
+
+  const handleFollowProfile = () => {
+    if (!onFollowAccount) return;
+    void runPublicProfileAction("follow", async () => {
+      const response = await onFollowAccount(displayName);
+      setProfile(response.profile);
+      setAvatarDraft(response.profile.avatar);
+    }, `Following ${displayName}.`);
+  };
+
+  const handleUnfollowProfile = () => {
+    if (!onUnfollowAccount) return;
+    void runPublicProfileAction("unfollow", async () => {
+      const response = await onUnfollowAccount(displayName);
+      setProfile(response.profile);
+      setAvatarDraft(response.profile.avatar);
+    }, `Unfollowed ${displayName}.`);
+  };
+
+  const handleChallengeProfile = () => {
+    if (!onChallengeAccount) return;
+    void runPublicProfileAction("challenge", async () => {
+      await onChallengeAccount(displayName);
+    }, `Challenge created for ${displayName}.`);
+  };
+
+  const handleRematchProfile = () => {
+    if (!onChallengeAccount || !sharedCompletedPublicGame) return;
+    const sourceGameId = sharedCompletedPublicGame.gameId;
+    void runPublicProfileAction("rematch", async () => {
+      await onChallengeAccount(displayName, { intent: "rematch", sourceGameId });
+    }, `Rematch created for ${displayName}.`);
+  };
+
   const searchSlot = searchProfiles ? (
     <div className="online-profile-search">
       <label>
@@ -939,6 +1078,79 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
           <button type="button" className="online-profile-button subtle" onClick={onOpenAccountControls}>
             Account Controls
           </button>
+        )}
+        {hasPublicProfileActions && (
+          <div className="online-profile-hero-actions" role="group" aria-label={`Profile actions for ${displayName}`}>
+            {canChallengeProfile && (
+              <button
+                type="button"
+                className="online-profile-button"
+                onClick={handleChallengeProfile}
+                disabled={profileActionStatus !== "idle"}
+                aria-label={`Challenge ${displayName}`}
+              >
+                {profileActionStatus === "challenge" ? "Creating..." : "Challenge"}
+              </button>
+            )}
+            {canFollowProfile && (
+              <button
+                type="button"
+                className="online-profile-button subtle"
+                onClick={handleFollowProfile}
+                disabled={profileActionStatus !== "idle"}
+                aria-label={`Follow ${displayName}`}
+              >
+                {profileActionStatus === "follow" ? "Following..." : "Follow"}
+              </button>
+            )}
+            {canUnfollowProfile && (
+              <button
+                type="button"
+                className="online-profile-button subtle"
+                onClick={handleUnfollowProfile}
+                disabled={profileActionStatus !== "idle"}
+                aria-label={`Unfollow ${displayName}`}
+              >
+                {profileActionStatus === "unfollow" ? "Updating..." : "Unfollow"}
+              </button>
+            )}
+            {canWatchProfile && firstPublicLiveGame && (
+              <button
+                type="button"
+                className="online-profile-button"
+                onClick={() => onSpectate?.(firstPublicLiveGame.gameId)}
+                aria-label={`Watch ${displayName} live game ${firstPublicLiveGame.gameId}`}
+              >
+                Watch Live
+              </button>
+            )}
+            {canAnalyzeProfile && latestPublicGame && (
+              <button
+                type="button"
+                className="online-profile-button subtle"
+                onClick={() => onReplay?.(latestPublicGame.gameId)}
+                aria-label={`Analyze latest public game ${latestPublicGame.gameId} from ${displayName} profile`}
+              >
+                Analyze Recent
+              </button>
+            )}
+            {canRematchProfile && sharedCompletedPublicGame && (
+              <button
+                type="button"
+                className="online-profile-button subtle"
+                onClick={handleRematchProfile}
+                disabled={profileActionStatus !== "idle"}
+                aria-label={`Rematch ${displayName} from ${sharedCompletedPublicGame.gameId}`}
+              >
+                {profileActionStatus === "rematch" ? "Creating..." : "Rematch"}
+              </button>
+            )}
+            {profileActionMessage && (
+              <p className="online-profile-action-message" role="status" aria-live="polite">
+                {profileActionMessage}
+              </p>
+            )}
+          </div>
         )}
       </section>
 
@@ -1266,11 +1478,11 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                 <p role="status">Loading public games...</p>
               ) : publicGamesStatus === "error" ? (
                 <p className="online-profile-error">Public games could not be loaded.</p>
-              ) : publicGames.length === 0 ? (
+              ) : profilePublicGames.length === 0 ? (
                 <p>No public completed games yet.</p>
               ) : (
                 <ol className="online-profile-public-games">
-                  {publicGames.map((game) => (
+                  {profilePublicGames.map((game) => (
                     <li key={game.gameId}>
                       <div>
                         <strong>{publicGameTitle(game)}</strong>
@@ -1309,7 +1521,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                 <p>No public rating history yet.</p>
               ) : (
                 <ol className="online-profile-rating-history public">
-                  {publicRatingHistory.map((point) => (
+                  {publicRatingHistoryRecent.map((point) => (
                     <li key={`${point.appliedAt}-${point.games}-${point.rating}`}>
                       <span>{point.display}</span>
                       <span>{formatCount(point.games, "rated game")}</span>

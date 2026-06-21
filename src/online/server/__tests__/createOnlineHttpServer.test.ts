@@ -38,6 +38,7 @@ import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   projectOnlineGameSummaries,
   type OnlinePersonalGameDirectoryListOptions,
+  type OnlinePublicProfileGameDirectoryListOptions,
   type OnlineGameDirectoryResponse,
   type OnlineGameSummary,
 } from "../../readModel";
@@ -1349,6 +1350,160 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("Samir");
     expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(body)).not.toContain("deviation");
+  });
+
+  it("serves public profile games by participant identity without loose search or raw account ids", async () => {
+    let testingIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const otherIdentity = { kind: "registered" as const, id: "account_other", displayName: "Other Testing" };
+    const completed = (
+      gameId: string,
+      visibility: OnlineGameSummary["visibility"],
+      participants: OnlineGameSummary["participants"],
+      updatedAt: string
+    ): OnlineGameSummary => ({
+      ...summaryForGame(gameId, visibility),
+      status: "complete",
+      archiveState: "archived",
+      endedAt: updatedAt,
+      updatedAt,
+      hasTimeControl: false,
+      ratingMode: "rated",
+      participants,
+      result: { winner: "w", reason: "resignation" },
+      livePreview: withoutPreviewClock(summaryForGame(gameId, visibility).livePreview),
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-19T12:00:00.000Z"),
+      loadGameSummaries: () => {
+        if (!testingIdentity) return [];
+        return [
+          completed(
+            "game_testing_public_match",
+            "public",
+            [
+              { seat: "w", role: "white", identity: testingIdentity },
+              { seat: "b", role: "black", identity: otherIdentity },
+            ],
+            "2026-06-19T12:03:00.000Z"
+          ),
+          completed(
+            "game_testing_private_hidden",
+            "private",
+            [
+              { seat: "w", role: "white", identity: testingIdentity },
+              { seat: "b", role: "black", identity: otherIdentity },
+            ],
+            "2026-06-19T12:02:00.000Z"
+          ),
+          completed(
+            "game_testing_display_name_collision",
+            "public",
+            [
+              { seat: "w", role: "white", identity: { kind: "registered", id: "account_collision", displayName: "Testing" } },
+              { seat: "b", role: "black", identity: otherIdentity },
+            ],
+            "2026-06-19T12:01:00.000Z"
+          ),
+          {
+            ...summaryForGame("game_testing_live_filtered", "public"),
+            participants: [
+              { seat: "w", role: "white", identity: testingIdentity },
+              { seat: "b", role: "black", identity: otherIdentity },
+            ],
+          },
+        ];
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+    testingIdentity = account.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/games?state=archived&limit=10&clock=casual&rating=rated&result=resignation`
+    );
+    const body = await response.json();
+    const oldSearchResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/games?state=archived&q=Testing`
+    );
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/games?token=secret`
+    );
+    const missingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Missing/games?state=archived`
+    );
+    const missingTokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Missing/games?token=secret`
+    );
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [
+        {
+          gameId: "game_testing_public_match",
+          visibility: "public",
+          participants: [
+            { seat: "w", role: "white", identity: redactedRegisteredIdentity(account) },
+            { seat: "b", role: "black", identity: { kind: "registered", id: "registered:other testing", displayName: "Other Testing" } },
+          ],
+        },
+      ],
+    });
+    expect(body.games).toHaveLength(1);
+    expect(oldSearchResponse.status).toBe(400);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(missingResponse.status).toBe(404);
+    expect(missingTokenQueryResponse.status).toBe(400);
+    expect(JSON.stringify(body)).not.toContain(account.account.accountId);
+    expect(JSON.stringify(body)).not.toContain("account_collision");
+    expect(JSON.stringify(body)).not.toContain("game_testing_private_hidden");
+    expect(JSON.stringify(body)).not.toContain("game_testing_display_name_collision");
+  });
+
+  it("validates public profile game store responses against the resolved participant", async () => {
+    const listPublicProfileGameSummaries = vi.fn((
+      options: OnlinePublicProfileGameDirectoryListOptions
+    ): OnlineGameDirectoryResponse => ({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [
+        {
+          ...summaryForGame("game_testing_store_match", "public"),
+          participants: [
+            { seat: "w", role: "white", identity: options.identity },
+            { seat: "b", role: "black", identity: { kind: "registered", id: "account_other", displayName: "Other" } },
+          ],
+        },
+      ],
+    }));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-19T12:00:00.000Z"),
+      listPublicProfileGameSummaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/games?state=active&limit=3`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listPublicProfileGameSummaries).toHaveBeenCalledWith({
+      identity: account.account.identity,
+      visibility: "public",
+      state: "active",
+      limit: 3,
+      cursor: undefined,
+      clock: undefined,
+      rating: undefined,
+      result: undefined,
+    });
+    expect(body.games[0].participants[0].identity).toEqual(redactedRegisteredIdentity(account));
+    expect(JSON.stringify(body)).not.toContain(account.account.accountId);
   });
 
   it("searches public account profiles by partial display name without leaking account internals", async () => {

@@ -129,6 +129,9 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toMatch(/\.app-shell-nav-primary\s*\{[^}]*overflow:\s*hidden;/s);
     expect(css).toContain("flex-wrap: nowrap;");
     expect(css).toContain("overflow-x: auto;");
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.app-shell-nav\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.app-shell-nav-actions\s*\{[^}]*flex:\s*1 0 100%;[^}]*width:\s*100%;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.app-shell-nav-actions > \*\s*\{[^}]*width:\s*100%;/s);
     expect(css).toContain(".app-shell-destination-label");
     expect(css).toContain(".app-shell-back-label");
     expect(css).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.app-shell-back-label\s*\{[^}]*display:\s*none;/s);
@@ -159,8 +162,12 @@ describe("Tutorial mobile layout CSS", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const onlineCss = readFileSync(resolve(testDir, "../../css/OnlineGameBrowser.css"), "utf8");
 
+    expect(onlineCss).toContain("grid-template-columns: minmax(180px, max-content) minmax(220px, 1fr) auto;");
     expect(onlineCss).toContain("grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));");
     expect(onlineCss).toContain(".online-browser-filter-panel");
+    expect(onlineCss).toContain(".online-browser-toolbar-actions");
+    expect(onlineCss).toContain(".online-browser-filter-toggle");
+    expect(onlineCss).toContain(".online-browser-filter-active-label");
     expect(onlineCss).toContain(".online-browser-control-title");
     expect(onlineCss).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
     expect(onlineCss).toContain(".online-browser-visually-hidden");
