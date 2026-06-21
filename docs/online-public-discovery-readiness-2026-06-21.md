@@ -35,12 +35,15 @@ This document defines the current safety boundary for Castles public discovery. 
 
 ## Sanction Readiness
 
-Broader public discovery should wait until these account states are implemented and tested:
+Broader public discovery is gated behind the implemented beta moderation states:
 
 - `active`: normal account.
 - `limited`: can sign in and play private/unlisted games, but cannot appear in broad public discovery.
 - `report_locked`: can sign in and recover existing games, but cannot create public listings, challenges, reports, or profile actions.
-- `closed`: cannot sign in; historical public records keep existing visibility rules.
+
+The current beta implementation fails closed for both non-active states on new profile/social/report/challenge/listing actions. Existing sign-in, self-profile recovery reads, account game recovery, and historical public game visibility are separate read/recovery paths, not new public-discovery actions.
+
+Account closure/deletion remains a separate account lifecycle path, not a public moderation state. Historical public records keep their existing visibility rules unless a separate anonymization migration is designed.
 
 Appeals should remain operator-handled in beta. Do not add public appeal feeds, public moderation notes, or notification loops.
 
@@ -51,6 +54,7 @@ Appeals should remain operator-handled in beta. Do not add public appeal feeds, 
 - Provisional ratings keep the `?` marker anywhere they are displayed.
 - Current beta leaderboards exclude `0 rated games` accounts, but may show provisional players with at least one rated game. The UI must label the list as beta rating records.
 - A future official leaderboard should require a documented minimum rated-game count, non-provisional status, and an inactivity rule before launch.
+- API requests for official leaderboard or public-database modes must fail closed until the eligibility, inactivity, archive-indexing, and moderation rules exist.
 - Leaderboard payloads must continue to omit rating-engine internals, deviation, volatility, raw account ids, bearer tokens, and session ids.
 
 ## Explicit Non-Goals

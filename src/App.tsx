@@ -146,7 +146,7 @@ import { loadPGNText } from './Classes/Services/PGNLoadService';
 import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online' | 'profile';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online' | 'people' | 'profile';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
 type OnlineAccountUiStatus =
   | "signed-out"
@@ -1106,6 +1106,10 @@ function App() {
 
   const handleOpenOnlineBrowser = () => {
     pushView('online');
+  };
+
+  const handleOpenPeople = () => {
+    pushView('people');
   };
 
   const handleOpenGame = () => {
@@ -2762,6 +2766,11 @@ function App() {
       id: "online",
       label: "Online",
       onClick: handleOnlineStateOnline,
+    },
+    {
+      id: "people",
+      label: "People",
+      onClick: handleOpenPeople,
       notificationCount: onlineChallengeNavigationActivityCount,
       notificationSingularLabel: "challenge activity",
       notificationPluralLabel: onlineNavigationNotificationLabel,
@@ -2772,6 +2781,7 @@ function App() {
     handleOnlineStateTutorial,
     handleOnlineStateLibrary,
     handleOnlineStateOnline,
+    handleOpenPeople,
     handleOpenProfile,
     onlineChallengeNavigationActivityCount,
     onlineNavigationNotificationLabel,
@@ -3172,6 +3182,70 @@ function App() {
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenProfile={handleOpenProfile}
+          onOpenPeople={handleOpenPeople}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
+          onAccountChallengeNavigationActivityChange={setOnlineChallengeNavigationActivityCount}
+          onCreateSeek={onlineLobbySetup ? handleListCurrentSetupInLobby : undefined}
+          onQuickMatch={onlineLobbySetup ? handleQuickMatch : undefined}
+          quickMatchSetupSummary={quickMatchSetupSummary}
+          loadOpenSeeks={handleLoadOpenSeekDirectory}
+          onAcceptSeek={handleAcceptOpenSeek}
+          onCancelSeek={handleCancelOpenSeek}
+          ownedSeekIds={openSeekCreator ? [openSeekCreator.seekId] : []}
+          ownedSeekResponse={openSeekResponse}
+          onRefreshOwnedSeek={handleRefreshOwnedOpenSeek}
+          onJoinOwnedSeek={openSeekResponse?.gameInvite ? handleJoinOwnedOpenSeek : undefined}
+          onSpectate={handleSpectateOnlineGame}
+          onReplay={handleReplayOnlineGame}
+          resolveAccountGameJoin={resolveAccountGameJoin}
+          onReturnToAccountGame={handleReturnToAccountGame}
+          onRejoinAccountGame={handleRejoinAccountGame}
+          onRejoinAccountChallengeGame={handleRejoinAccountChallengeGame}
+          rejoiningAccountGameId={rejoiningAccountGameId}
+          recentOnlineGames={recentOnlineGames}
+          onClearRecentOnlineGames={handleClearRecentOnlineGames}
+          account={onlineAccount}
+          accountStatus={onlineAccountStatus}
+          accountError={onlineAccountError}
+          onCreateAccount={handleCreateOnlineAccount}
+          onSignInAccount={handleSignInOnlineAccount}
+          loadAccountOAuthProviders={fetchOnlineAccountOAuthProviders}
+          onSignOutAccount={handleSignOutOnlineAccount}
+          loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
+          loadAccountHeadToHeadGames={onlineAccountSession ? handleLoadOnlineAccountHeadToHeadGames : undefined}
+          loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
+          onAcceptAccountChallenge={onlineAccountSession ? handleAcceptOnlineAccountChallenge : undefined}
+          onDeclineAccountChallenge={onlineAccountSession ? handleDeclineOnlineAccountChallenge : undefined}
+          onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
+          loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
+          searchAccountProfiles={handleSearchOnlineAccountProfiles}
+          loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
+          loadRatingLeaderboard={onlineAccountSession ? handleLoadOnlineRatingLeaderboard : undefined}
+          onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
+          onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
+          onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}
+          onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
+          onReportAccount={onlineAccountSession ? handleReportOnlineAccount : undefined}
+          onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
+          onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
+        />
+      )}
+
+      {view === 'people' && (
+        <OnlineGameBrowser
+          surface="people"
+          onBack={returnToPreviousView}
+          onOpenGame={handleOpenGame}
+          onConfigureSetup={handleNewGameClick}
+          backLabel={currentBackLabel}
+          initialTab={onlineBrowserTab}
+          activeTab={onlineBrowserTab}
+          onTabChange={setOnlineBrowserTab}
+          onTutorial={handleTutorialClick}
+          onOpenLibrary={handleOpenLibrary}
+          onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
           onAccountChallengeNavigationActivityChange={setOnlineChallengeNavigationActivityCount}
@@ -3252,6 +3326,7 @@ function App() {
           onOpenGame={handleOpenGame}
           onTutorial={handleTutorialClick}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenPeople={handleOpenPeople}
           onOpenLibrary={handleOpenLibrary}
           onOpenAccountControls={() => setOnlineAccountDialogOpen(true)}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}

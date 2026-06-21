@@ -158,12 +158,14 @@ import {
 } from "../accounts";
 import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_MODERATION_STATES,
   ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_REASONS,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  parseOnlineAccountModerationStatePatch,
   parseOnlineAccountModerationReportStatusPatch,
   parseOnlineAccountAvatar,
   parseOnlineAccountProfilePatch,
@@ -172,6 +174,9 @@ import {
   type OnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationAuditListResponse,
+  type OnlineAccountModerationAccountState,
+  type OnlineAccountModerationAccountStateResponse,
+  type OnlineAccountModerationState,
   type OnlineAccountModerationReport,
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
@@ -272,6 +277,8 @@ const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
+const OFFICIAL_DISCOVERY_GATE_MESSAGE =
+  "Official rating leaderboards and public database expansion are gated until eligibility, inactivity, archive indexing, and moderation rules are implemented.";
 const ACCOUNT_RATING_HISTORY_DEFAULT_LIMIT = 20;
 const ACCOUNT_RATING_HISTORY_MAX_LIMIT = 50;
 const ACCOUNT_SEARCH_DEFAULT_LIMIT = 8;
@@ -363,6 +370,12 @@ const MODERATION_AUDIT_RESPONSE_KEYS = new Set([
   "nextStatus",
   "note",
   "createdAt",
+]);
+const MODERATION_ACCOUNT_STATE_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "displayName",
+  "moderationState",
+  "updatedAt",
 ]);
 
 function stripRuntimeStatusError<T extends { lastError?: string }>(
@@ -1021,12 +1034,32 @@ function parseAccountChallengeDirectoryOptions(
   return { ok: true, state: state as OnlineAccountChallengeDirectoryState };
 }
 
+function isOfficialDiscoveryGateQuery(params: URLSearchParams): boolean {
+  for (const [rawName, rawValue] of params.entries()) {
+    const name = rawName.trim().toLowerCase();
+    const value = rawValue.trim().toLowerCase();
+    if (name === "official" || name === "database") {
+      return true;
+    }
+    if ((name === "mode" || name === "kind" || name === "leaderboard") && value === "official") {
+      return true;
+    }
+    if (value === "official" || value === "public_database" || value === "public-database") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function parseRatingLeaderboardOptions(
   originalUrl: string
 ): { ok: true; limit: number; scope: OnlineRatingLeaderboardScope } | { ok: false; message: string } {
   const url = new URL(originalUrl, "http://localhost");
   if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
     return { ok: false, message: "Rating leaderboard query is invalid." };
+  }
+  if (isOfficialDiscoveryGateQuery(url.searchParams)) {
+    return { ok: false, message: OFFICIAL_DISCOVERY_GATE_MESSAGE };
   }
   for (const name of url.searchParams.keys()) {
     if (name !== "limit" && name !== "scope") {
@@ -2124,6 +2157,25 @@ function validateModerationAuditResponseShape(value: unknown): OnlineAccountMode
   };
 }
 
+function validateModerationAccountStateResponseShape(value: unknown): OnlineAccountModerationAccountState {
+  if (!isResponseRecord(value)) throw new Error("Moderation account state must be an object.");
+  assertAllowedResponseKeys(value, MODERATION_ACCOUNT_STATE_RESPONSE_KEYS, "Moderation account state");
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION ||
+    !isModerationDisplayName(value.displayName) ||
+    !ONLINE_ACCOUNT_MODERATION_STATES.has(value.moderationState as OnlineAccountModerationState) ||
+    !isIsoTimestamp(value.updatedAt)
+  ) {
+    throw new Error("Moderation account state is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    displayName: value.displayName,
+    moderationState: value.moderationState as OnlineAccountModerationState,
+    updatedAt: value.updatedAt,
+  };
+}
+
 function encodeModerationReportQueueCursor(report: { createdAt: string; reportId: string }): string {
   return Buffer.from(
     JSON.stringify({
@@ -2444,6 +2496,38 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const resolved = await resolveAccountBearer(req);
     if (!resolved.ok) return resolved;
     return { ok: true, account: resolved.account, identity: resolved.account.identity };
+  };
+
+  const activeAccountActionError = (): OnlineReject => ({
+    code: "not_found",
+    message: "No active online account was found for that action.",
+  });
+
+  const checkActiveAccountAction = async (
+    account: OnlineAccount | null
+  ): Promise<
+    | { ok: true }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    if (!account) return { ok: true };
+    try {
+      const moderationState = await accountStore.getAccountModerationState(account.accountId);
+      if (moderationState === "active") return { ok: true };
+      return {
+        ok: false,
+        status: 404,
+        error: activeAccountActionError(),
+        reason: "account_not_active",
+      };
+    } catch (error) {
+      console.error("Failed to check account moderation state", error);
+      return {
+        ok: false,
+        status: 503,
+        error: { code: "persistence_failed", message: "Account moderation state could not be checked." },
+        reason: "account_store_failed",
+      };
+    }
   };
 
   const canAccountViewOpenSeek = async (
@@ -4656,6 +4740,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: patch.error });
       return;
     }
+    const activeAccount = await checkActiveAccountAction(auth.account);
+    if (!activeAccount.ok) {
+      res.status(activeAccount.status).json({ error: activeAccount.error });
+      return;
+    }
     try {
       const profile = await accountStore.updateProfileSettings(auth.account.accountId, patch.value, auth.usedAt);
       if (!profile) {
@@ -4718,6 +4807,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         error: { code: "persistence_failed", message: "Rating leaderboard could not be loaded." },
       });
     }
+  });
+
+  app.get("/api/online/database", async (req, res) => {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many public database requests were sent too quickly." },
+      });
+      return;
+    }
+    const url = new URL(req.originalUrl, "http://localhost");
+    if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Online database query is invalid." },
+      });
+      return;
+    }
+    log({ event: "online.database", status: "rejected", reason: "policy_gate" });
+    res.status(404).json({
+      error: { code: "not_found", message: OFFICIAL_DISCOVERY_GATE_MESSAGE },
+    });
   });
 
   app.get("/api/online/accounts/search", async (req, res) => {
@@ -5225,6 +5334,89 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
+  app.patch("/api/online/admin/accounts/:displayName/moderation", async (req, res) => {
+    setOnlineNoStoreHeaders(res);
+    const authorized = resolveAdminBearer(req);
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
+    if (!authorized) {
+      log({
+        event: "online.admin.account.moderation",
+        status: "rejected",
+        reason: rateLimitAllowed ? "not_found" : "rate_limited_not_found",
+      });
+      res.status(404).json({ error: adminNotFoundError() });
+      return;
+    }
+    if (!rateLimitAllowed) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
+      });
+      return;
+    }
+    const query = validateModerationReportActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.admin.account.moderation", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Account display name is invalid." },
+      });
+      return;
+    }
+    const patch = parseOnlineAccountModerationStatePatch(req.body);
+    if (!patch.ok) {
+      res.status(400).json({ error: patch.error });
+      return;
+    }
+    if (containsDurableSecret(req.body)) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Account moderation state must not contain account or invite secrets." },
+      });
+      return;
+    }
+    try {
+      const updatedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const result = await accountStore.updateAccountModerationState(displayName, patch.value.moderationState, updatedAt);
+      if (result.status === "not_found") {
+        log({ event: "online.admin.account.moderation", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account was found." },
+        });
+        return;
+      }
+      if (result.status === "unchanged") {
+        log({ event: "online.admin.account.moderation", status: "rejected", reason: "unchanged" });
+        res.status(409).json({
+          error: { code: "not_allowed", message: "Account already has that moderation state." },
+        });
+        return;
+      }
+      if (result.status !== "ok") {
+        res.status(500).json({
+          error: { code: "persistence_failed", message: "Account moderation state result was invalid." },
+        });
+        return;
+      }
+      const account = validateModerationAccountStateResponseShape(result.account);
+      const body: OnlineAccountModerationAccountStateResponse = {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        account,
+      };
+      log({ event: "online.admin.account.moderation", status: "accepted" });
+      res.json(body);
+    } catch (error) {
+      console.error("Failed to update account moderation state", error);
+      log({ event: "online.admin.account.moderation", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account moderation state could not be updated." },
+      });
+    }
+  });
+
   app.get("/api/online/admin/reports", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
@@ -5626,6 +5818,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const patch = parseOnlineAccountPrivacyPatch(req.body);
     if (!patch.ok) {
       res.status(400).json({ error: patch.error });
+      return;
+    }
+    const activeAccount = await checkActiveAccountAction(auth.account);
+    if (!activeAccount.ok) {
+      log({ event: "online.account.privacy.update", status: "rejected", reason: activeAccount.reason });
+      res.status(activeAccount.status).json({ error: activeAccount.error });
       return;
     }
     try {
@@ -6609,6 +6807,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
       return;
     }
+    const activeAccount = await checkActiveAccountAction(accountIdentity.account);
+    if (!activeAccount.ok) {
+      res.status(activeAccount.status).json({ error: activeAccount.error });
+      return;
+    }
     if ((visibility === "followed" || visibility === "invited") && accountIdentity.identity?.kind !== "registered") {
       res.status(400).json({
         error: {
@@ -6871,6 +7074,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
       return;
     }
+    const activeAccount = await checkActiveAccountAction(accountIdentity.account);
+    if (!activeAccount.ok) {
+      res.status(activeAccount.status).json({ error: activeAccount.error });
+      return;
+    }
     const sessionIdentity = accountIdentity.identity
       ? { ok: true as const, identity: accountIdentity.identity }
       : normalizePublicSessionIdentity(req.body?.sessionId, "sessionId");
@@ -7079,9 +7287,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
     } else {
-      const accountIdentity = await resolveOptionalAccountIdentity(req);
+      const accountIdentity = await resolveOptionalAccountSession(req);
       if (!accountIdentity.ok) {
         res.status(accountIdentity.status).json({ error: accountIdentity.error });
+        return;
+      }
+      const activeAccount = await checkActiveAccountAction(accountIdentity.account);
+      if (!activeAccount.ok) {
+        res.status(activeAccount.status).json({ error: activeAccount.error });
         return;
       }
       resolvedChallengerIdentity = accountIdentity.identity;

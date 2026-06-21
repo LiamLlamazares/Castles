@@ -142,6 +142,7 @@ const ACCOUNT_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; l
 ];
 
 interface OnlineGameBrowserProps {
+  surface?: "online" | "people";
   loadGames?: (options?: FetchOnlineGameSummariesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadOpenSeeks?: (options?: FetchOpenSeekDirectoryOptions) => Promise<OpenSeekDirectoryResponse>;
   onBack: () => void;
@@ -149,6 +150,8 @@ interface OnlineGameBrowserProps {
   onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
+  onOpenOnlineBrowser?: () => void;
+  onOpenPeople?: () => void;
   onOpenProfile?: (displayName?: string) => void;
   onCreateSeek?: (
     visibility?: OpenSeekVisibility,
@@ -1029,6 +1032,7 @@ function isRateLimitError(error: unknown): boolean {
 }
 
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
+  surface = "online",
   loadGames = fetchOnlineGameDirectory,
   loadOpenSeeks = fetchOpenSeekDirectory,
   onBack,
@@ -1036,6 +1040,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onConfigureSetup,
   onTutorial,
   onOpenLibrary,
+  onOpenOnlineBrowser,
+  onOpenPeople,
   onOpenProfile,
   onCreateSeek,
   onQuickMatch,
@@ -1209,6 +1215,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onUnblockAccount
   );
   const canUseAccountChallenges = Boolean(account && loadAccountChallenges);
+  const isPeopleSurface = surface === "people";
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -1736,6 +1743,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     cursor?: string,
     options: { background?: boolean } = {}
   ) => {
+    if (isPeopleSurface) return;
     const background = options.background === true;
     if (background && gameLoadInFlightRef.current) return;
     const requestId = requestIdRef.current + 1;
@@ -1780,7 +1788,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         gameLoadInFlightRef.current = false;
       }
     }
-  }, [gameDirectoryOptions, loadGames]);
+  }, [gameDirectoryOptions, isPeopleSurface, loadGames]);
 
   const refreshGames = React.useCallback(() => {
     void loadPage("replace");
@@ -1792,11 +1800,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [loadPage, nextCursor]);
 
   React.useEffect(() => {
+    if (isPeopleSurface) return;
     refreshGames();
-  }, [refreshGames]);
+  }, [isPeopleSurface, refreshGames]);
 
   React.useEffect(() => {
-    if (tab !== "lobby") return;
+    if (isPeopleSurface || tab !== "lobby") return;
     const refreshLiveGamesIfVisible = () => {
       if (document.visibilityState !== "visible") return;
       void loadPage("replace", undefined, { background: true });
@@ -1810,10 +1819,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadPage, tab]);
+  }, [isPeopleSurface, loadPage, tab]);
 
   React.useEffect(() => {
-    if (tab !== "watch") return;
+    if (isPeopleSurface || tab !== "watch") return;
     const refreshWatchIfVisible = () => {
       if (document.visibilityState !== "visible") return;
       void loadPage("replace", undefined, { background: true });
@@ -1827,7 +1836,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadPage, tab]);
+  }, [isPeopleSurface, loadPage, tab]);
 
   const seekDirectoryOptions = React.useMemo<FetchOpenSeekDirectoryOptions>(() => ({
     state: "open",
@@ -1863,6 +1872,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const loadOpenSeekPage = React.useCallback(async function runOpenSeekLoad(
     options: { background?: boolean; mode?: "replace" | "append"; cursor?: string } = {}
   ) {
+    if (isPeopleSurface) return;
     const background = options.background === true;
     const mode = options.mode ?? "replace";
     if (seekLoadInFlightRef.current) {
@@ -1931,12 +1941,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         setIsSeekLoadingMore(false);
       }
     }
-  }, [loadOpenSeeks, mergePendingOpenSeeks]);
+  }, [isPeopleSurface, loadOpenSeeks, mergePendingOpenSeeks]);
 
   React.useEffect(() => {
-    if (tab !== "lobby") return;
+    if (isPeopleSurface || tab !== "lobby") return;
     void loadOpenSeekPage({ background: false });
-  }, [loadOpenSeekPage, seekDirectoryOptions, tab]);
+  }, [isPeopleSurface, loadOpenSeekPage, seekDirectoryOptions, tab]);
 
   const loadMoreOpenSeeks = React.useCallback(() => {
     if (!seekNextCursor) return;
@@ -1944,7 +1954,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [loadOpenSeekPage, seekNextCursor]);
 
   React.useEffect(() => {
-    if (tab !== "lobby") return;
+    if (isPeopleSurface || tab !== "lobby") return;
     const refreshIfVisible = () => {
       if (document.visibilityState !== "visible") return;
       if (Date.now() < seekAutoRefreshPausedUntilRef.current) return;
@@ -1959,7 +1969,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadOpenSeekPage, tab]);
+  }, [isPeopleSurface, loadOpenSeekPage, tab]);
 
   const publicGames = React.useMemo(
     () => games.filter((game) => game.visibility === "public"),
@@ -3791,16 +3801,26 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onlineNotificationCount,
     pendingIncomingChallengeCount + accountChallengeUnreadActivity.acceptedReady
   );
+  const showFullPeopleSurface = account && canUseAccountSocial && (isPeopleSurface || !onOpenPeople);
+  const showOnlinePeopleHandoff = account && canUseAccountSocial && !isPeopleSurface && Boolean(onOpenPeople);
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
     {
       id: "online",
       label: "Online",
-      notificationCount: onlineDestinationNotificationCount,
-      notificationSingularLabel: "challenge activity",
-      notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+      onClick: isPeopleSurface ? onOpenOnlineBrowser : undefined,
     },
+    ...(isPeopleSurface || onOpenPeople
+      ? [{
+          id: "people" as const,
+          label: "People",
+          onClick: isPeopleSurface ? undefined : onOpenPeople,
+          notificationCount: onlineDestinationNotificationCount,
+          notificationSingularLabel: "challenge activity",
+          notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+        }]
+      : []),
     ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
@@ -3884,11 +3904,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   return (
     <div className="online-browser-page">
       <AppShellNav
-        ariaLabel="Online navigation"
-        activeDestination="online"
-        title="Online"
-        kicker="Lobby, Watch, Archive"
-        description="Create or accept lobby listings, watch live public games, and replay completed public games."
+        ariaLabel={isPeopleSurface ? "People navigation" : "Online navigation"}
+        activeDestination={isPeopleSurface ? "people" : "online"}
+        title={isPeopleSurface ? "People" : "Online"}
+        kicker={isPeopleSurface ? "Players, Challenges" : "Lobby, Watch, Archive"}
+        description={
+          isPeopleSurface
+            ? "Find players, manage challenges, and keep followed-player shortcuts separate from the game lists."
+            : "Create or accept lobby listings, watch live public games, and replay completed public games."
+        }
         backLabel={backLabel}
         onBack={onBack}
         destinations={navDestinations}
@@ -3933,7 +3957,54 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </section>
       )}
 
-      {account && canUseAccountSocial && (
+      {showOnlinePeopleHandoff && (
+        <section className="online-browser-account-panel online-browser-people-handoff" aria-label="People and challenges">
+          <div className="online-browser-account-copy">
+            <span className="online-browser-section-kicker">People</span>
+            <strong>Players and challenges</strong>
+            <p>Player search, following, rating leaders, and account challenges now live on the People page.</p>
+            {hasChallengeNotice && (
+              <div className="online-browser-social-badges">
+                {pendingIncomingChallengeCount > 0 && <span>{formatCount(pendingIncomingChallengeCount, "incoming challenge")}</span>}
+                {pendingOutgoingChallengeCount > 0 && <span>{formatCount(pendingOutgoingChallengeCount, "sent challenge")}</span>}
+                {accountChallengeUnreadActivity.acceptedReady > 0 && (
+                  <span>{formatCount(accountChallengeUnreadActivity.acceptedReady, "game ready")}</span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="online-browser-account-actions">
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={onOpenPeople}
+            >
+              Open People
+            </button>
+          </div>
+        </section>
+      )}
+
+      {isPeopleSurface && !account && (
+        <section className="online-browser-social-panel" aria-label="People">
+          <div className="online-browser-section-header online-browser-social-header">
+            <div>
+              <span className="online-browser-section-kicker">People</span>
+              <h2>People</h2>
+              <p>Player search, following, and targeted challenges need a Castles account.</p>
+            </div>
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={() => setIsAccountDialogOpen(true)}
+            >
+              Account
+            </button>
+          </div>
+        </section>
+      )}
+
+      {showFullPeopleSurface && (
         <section className="online-browser-social-panel" aria-label="People">
           <div className="online-browser-section-header online-browser-social-header">
             <div>
@@ -4991,6 +5062,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </section>
       )}
 
+      {!isPeopleSurface && (
+        <>
       <section
         className={`online-browser-toolbar online-browser-toolbar-${tab} ${filterPanelOpen ? "filters-open" : "filters-closed"}`}
         aria-label="Online browser controls"
@@ -5970,6 +6043,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
           </>
         </main>
+      )}
+        </>
       )}
     </div>
   );

@@ -334,6 +334,42 @@ class FakePostgresAccountQueryable {
       return { rows: rating ? [{ payload: rating }] : [] };
     }
 
+    if (normalizedText.startsWith("SELECT profile_payload FROM online_accounts WHERE account_id")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      return { rows: account ? [{ profile_payload: account.profile_payload ?? {} }] : [] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_accounts SET profile_payload")) {
+      const [accountId, payload, updatedAt] = values as string[];
+      const account = this.accounts.get(accountId);
+      if (account) {
+        const patch = typeof payload === "string" ? JSON.parse(payload) : payload;
+        const moderationState = (account.profile_payload as { moderationState?: unknown } | undefined)?.moderationState;
+        const active = moderationState === undefined || moderationState === "active";
+        if (
+          normalizedText.includes("COALESCE(profile_payload->>'moderationState', 'active') = 'active'") &&
+          !active
+        ) {
+          return { rows: [] };
+        }
+        account.profile_payload = normalizedText.includes("COALESCE(profile_payload, '{}'::jsonb) || $2::jsonb")
+          ? { ...(account.profile_payload ?? {}), ...patch }
+          : patch;
+        account.updated_at = updatedAt;
+      }
+      return {
+        rows: account && normalizedText.includes("RETURNING account_id")
+          ? [{
+              account_id: account.account_id,
+              display_name: account.display_name,
+              created_at: account.created_at,
+              updated_at: account.updated_at,
+            }]
+          : [],
+      };
+    }
+
     if (normalizedText.startsWith("SELECT a.display_name, a.profile_payload, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
       const [minGames, limit] = values as number[];
       const rows = Array.from(this.ratingRows.entries())
@@ -1888,6 +1924,60 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("Fresh");
   });
 
+  it("gates official rating leaderboards and public database routes until policy rules exist", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const betaLeaderboardResponse = await fetch(`http://127.0.0.1:${port}/api/online/ratings/leaderboard`);
+    const officialModeResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?mode=official`
+    );
+    const officialScopeResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=official`
+    );
+    const publicDatabaseLeaderboardResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?database=public`
+    );
+    const databaseResponse = await fetch(`http://127.0.0.1:${port}/api/online/database`);
+    const databaseTokenQueryResponse = await fetch(`http://127.0.0.1:${port}/api/online/database?token=secret`);
+
+    const gatedBodies = await Promise.all([
+      officialModeResponse.json(),
+      officialScopeResponse.json(),
+      publicDatabaseLeaderboardResponse.json(),
+      databaseResponse.json(),
+    ]);
+    const betaBody = await betaLeaderboardResponse.json();
+    const databaseTokenQueryBody = await databaseTokenQueryResponse.json();
+
+    expect(betaLeaderboardResponse.status).toBe(200);
+    expect(betaBody).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      scope: "global",
+      entries: [],
+    });
+    expect(officialModeResponse.status).toBe(400);
+    expect(officialScopeResponse.status).toBe(400);
+    expect(publicDatabaseLeaderboardResponse.status).toBe(400);
+    expect(databaseResponse.status).toBe(404);
+    for (const body of gatedBodies) {
+      expect(body.error).toMatchObject({ code: expect.any(String) });
+      expect(body.error.message).toContain("eligibility");
+      expect(body.error.message).toContain("inactivity");
+      expect(body.error.message).toContain("archive indexing");
+      expect(body.error.message).toContain("moderation rules");
+    }
+    expect(databaseTokenQueryResponse.status).toBe(400);
+    expect(databaseTokenQueryBody).toEqual({
+      error: { code: "bad_request", message: "Online database query is invalid." },
+    });
+  });
+
   it("serves a following-scoped rating leaderboard for the authenticated account", async () => {
     const queryable = new FakePostgresAccountQueryable();
     const accountStore = createPostgresAccountStore(queryable);
@@ -2775,6 +2865,138 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(update)).not.toContain(samir.account.accountId);
     expect(JSON.stringify(update)).not.toContain(liam.session.token);
     expect(JSON.stringify(update)).not.toContain("account_");
+  });
+
+  it("lets admins sanction accounts before public discovery exposes them broadly", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const adminToken = "admin-token-with-enough-length";
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    await createAccountViaApi(port, "Samir");
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ moderationState: "report_locked" }),
+    });
+    const invalidStateResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "closed" }),
+    });
+    const unsupportedFieldResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "report_locked", accountId: "account_samir" }),
+    });
+
+    now = Date.parse("2026-06-01T12:05:00.000Z");
+    const updateResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "report_locked" }),
+    });
+    const update = await updateResponse.json();
+    const unchangedResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "report_locked" }),
+    });
+    const publicProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`);
+    const authenticatedSearchResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search?q=Sam`, {
+      headers: bearer(liam.session.token),
+    });
+    const authenticatedSearch = await authenticatedSearchResponse.json();
+    const challengeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ challengedDisplayName: "Samir", challengerSeat: "w", visibility: "unlisted", setup: createSetup() }),
+    });
+
+    now = Date.parse("2026-06-01T12:06:00.000Z");
+    const restoreResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Samir/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "active" }),
+    });
+    const restoredProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`);
+    const restoredProfile = await restoredProfileResponse.json();
+    const reporterLockResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/accounts/Liam/moderation`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ moderationState: "report_locked" }),
+    });
+    const lockedProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/profile`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } }),
+    });
+    const lockedPrivacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ followPolicy: "nobody" }),
+    });
+    const lockedOpenSeekResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ setup: createSetup(), creatorSeat: "random", visibility: "public" }),
+    });
+    const lockedQuickMatchResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const lockedChallengeResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ challengerSeat: "w", visibility: "private", setup: createSetup() }),
+    });
+    const lockedReporterReportResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "Locked reporters cannot submit new reports." }),
+    });
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(invalidStateResponse.status).toBe(400);
+    expect(unsupportedFieldResponse.status).toBe(400);
+    expect(updateResponse.status).toBe(200);
+    expect(update).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      account: {
+        schemaVersion: 2,
+        displayName: "Samir",
+        moderationState: "report_locked",
+        updatedAt: "2026-06-01T12:05:00.000Z",
+      },
+    });
+    expect(JSON.stringify(update)).not.toContain("account_");
+    expect(unchangedResponse.status).toBe(409);
+    expect(publicProfileResponse.status).toBe(404);
+    expect(authenticatedSearchResponse.status).toBe(200);
+    expect(authenticatedSearch.profiles).toEqual([]);
+    expect(challengeResponse.status).toBe(404);
+    expect(restoreResponse.status).toBe(200);
+    expect(restoredProfileResponse.status).toBe(200);
+    expect(restoredProfile.profile).toMatchObject({ displayName: "Samir" });
+    expect(JSON.stringify(restoredProfile)).not.toContain("moderationState");
+    expect(reporterLockResponse.status).toBe(200);
+    expect(lockedProfileResponse.status).toBe(404);
+    expect(lockedPrivacyResponse.status).toBe(404);
+    expect(lockedOpenSeekResponse.status).toBe(404);
+    expect(lockedQuickMatchResponse.status).toBe(404);
+    expect(lockedChallengeResponse.status).toBe(404);
+    expect(lockedReporterReportResponse.status).toBe(404);
   });
 
   it("rejects token-bearing admin report status query strings even with admin bearer auth", async () => {

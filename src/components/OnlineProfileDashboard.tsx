@@ -113,6 +113,7 @@ interface OnlineProfileDashboardProps {
   onOpenGame?: () => void;
   onTutorial?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenPeople?: () => void;
   onOpenLibrary?: () => void;
   onOpenAccountControls?: () => void;
   onlineNotificationCount?: number;
@@ -474,6 +475,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   onOpenGame,
   onTutorial,
   onOpenOnlineBrowser,
+  onOpenPeople,
   onOpenLibrary,
   onOpenAccountControls,
   onlineNotificationCount = 0,
@@ -742,6 +744,13 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
           id: "online" as const,
           label: "Online",
           onClick: onOpenOnlineBrowser,
+        }]
+      : []),
+    ...(onOpenPeople
+      ? [{
+          id: "people" as const,
+          label: "People",
+          onClick: onOpenPeople,
           notificationCount: onlineNotificationCount,
           notificationSingularLabel: "challenge activity",
           notificationPluralLabel: onlineNotificationLabel,

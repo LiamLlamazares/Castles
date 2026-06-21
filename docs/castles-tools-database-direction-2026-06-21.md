@@ -52,3 +52,5 @@ Do not add a top-level Database route until:
 - Public archive queries are indexed and bounded.
 - Rating leaderboard eligibility and inactive-account rules are implemented if ratings are used as a database filter.
 - Moderation/sanction states exist for excluding limited accounts from broad public discovery.
+
+Current server behavior enforces this boundary: `/api/online/database` returns the policy gate instead of a database payload, and rating leaderboard requests for official/database modes are rejected until eligibility, inactivity, archive-indexing, and moderation rules are implemented.

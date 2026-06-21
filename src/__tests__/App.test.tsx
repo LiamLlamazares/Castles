@@ -2487,7 +2487,7 @@ describe("App game setup lifecycle", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "People", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
@@ -3967,7 +3967,7 @@ describe("App game setup lifecycle", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/online/games?"))).toBe(false);
   });
 
-  it("polls signed-in account challenges into count-only Online navigation activity", async () => {
+  it("polls signed-in account challenges into count-only People navigation activity", async () => {
     const account = {
       schemaVersion: 1 as const,
       accountId: "account_nav_challenge",
@@ -4311,7 +4311,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     const accountActions = await screen.findByRole("region", { name: "Challenge account actions for Samir" });
-    expect(await screen.findByRole("button", { name: "Online, 1 challenge activity" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "People, 1 challenge activity" })).toBeInTheDocument();
     fireEvent.click(within(accountActions).getByRole("button", { name: "Report Samir from challenge link" }));
 
     const reportForm = await within(accountActions).findByRole("form", { name: "Report Samir" });
@@ -4334,12 +4334,12 @@ describe("App game setup lifecycle", () => {
     ));
     expect(await within(accountActions).findByText("Blocked Samir. Challenge actions are hidden for this link.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Online, 1 challenge activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "People, 1 challenge activity" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Accept Challenge" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Decline Challenge" })).not.toBeInTheDocument();
   });
 
-  it("syncs count-only Online navigation activity after declining a signed-in direct challenge link", async () => {
+  it("syncs count-only People navigation activity after declining a signed-in direct challenge link", async () => {
     const account = {
       schemaVersion: 1 as const,
       accountId: "account_direct_nav",
@@ -4433,7 +4433,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "Decline Challenge" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Online, 1 challenge activity" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "People, 1 challenge activity" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Decline Challenge" }));
 
@@ -4446,7 +4446,7 @@ describe("App game setup lifecycle", () => {
     expect(await screen.findByRole("status", { name: "Challenge status" })).toHaveTextContent("Status: declined");
     const onlineDestination = await waitFor(() => screen.getByRole("button", { name: "Online" }));
     expect(onlineDestination).not.toHaveTextContent("Samir");
-    expect(screen.queryByRole("button", { name: "Online, 1 challenge activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "People, 1 challenge activity" })).not.toBeInTheDocument();
   });
 
   it("shows challengers refresh and cancel actions", async () => {
@@ -4563,7 +4563,7 @@ describe("App game setup lifecycle", () => {
     );
   });
 
-  it("syncs count-only Online navigation activity when direct challenge auto-refresh finds an accepted game", async () => {
+  it("syncs count-only People navigation activity when direct challenge auto-refresh finds an accepted game", async () => {
     const account = {
       schemaVersion: 1 as const,
       accountId: "account_direct_auto",
@@ -4676,8 +4676,8 @@ describe("App game setup lifecycle", () => {
           { headers: { authorization: "Bearer challenge-token" } }
         );
         expect(screen.getByRole("button", { name: "Join Game" })).toBeInTheDocument();
-        const onlineDestination = screen.getByRole("button", { name: "Online, 1 challenge activity" });
-        expect(onlineDestination).not.toHaveTextContent("Samir");
+        const peopleDestination = screen.getByRole("button", { name: "People, 1 challenge activity" });
+        expect(peopleDestination).not.toHaveTextContent("Samir");
       },
       { timeout: 2500 }
     );

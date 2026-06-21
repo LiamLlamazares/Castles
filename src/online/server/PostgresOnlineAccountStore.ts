@@ -7,6 +7,7 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_MODERATION_STATES,
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
@@ -16,6 +17,8 @@ import {
   parseOnlineAccountAvatar,
   type OnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
+  type OnlineAccountModerationAccountState,
+  type OnlineAccountModerationState,
   type OnlineAccountModerationReport,
   type OnlineAccountProfilePatch,
   type OnlineAccountPrivacyPatch,
@@ -52,6 +55,7 @@ import {
   type UpdateOnlineAccountPasswordInput,
   type UpdateOnlineAccountReportStatusInput,
   type OnlineAccountPasswordUpdateResult,
+  type OnlineAccountModerationStateUpdateResult,
 } from "./OnlineAccountStore";
 import { hashOnlineToken, isOnlineTokenCredentialHash } from "./onlineTokenCredentials";
 import {
@@ -499,6 +503,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         FROM online_account_ratings r
         INNER JOIN online_accounts a ON a.account_id = r.account_id
         WHERE (r.payload->>'games')::integer >= $1
+          AND COALESCE(a.profile_payload->>'moderationState', 'active') = 'active'
         ORDER BY
           (r.payload->>'rating')::double precision DESC,
           (r.payload->>'games')::integer DESC,
@@ -538,6 +543,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         INNER JOIN online_accounts a ON a.account_id = v.account_id
         INNER JOIN online_account_ratings r ON r.account_id = v.account_id
         WHERE (r.payload->>'games')::integer >= $2
+          AND COALESCE(a.profile_payload->>'moderationState', 'active') = 'active'
         ORDER BY
           (r.payload->>'rating')::double precision DESC,
           (r.payload->>'games')::integer DESC,
@@ -558,6 +564,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     await this.ensureSchema();
     const target = await this.loadAccountByDisplayName(displayName);
     if (!target) return null;
+    if (!(await this.canExposeAccount(target.accountId, viewerAccountId))) return null;
     if (viewerAccountId !== null && target.accountId !== viewerAccountId && await this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
@@ -566,7 +573,9 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
   async resolveAccountIdForDisplayName(displayName: string): Promise<string | null> {
     await this.ensureSchema();
-    return (await this.loadAccountByDisplayName(displayName))?.accountId ?? null;
+    const account = await this.loadAccountByDisplayName(displayName);
+    if (!account || (await this.moderationStateForAccount(account.accountId)) !== "active") return null;
+    return account.accountId;
   }
 
   async searchProfiles(
@@ -584,6 +593,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         SELECT a.account_id, a.display_name, a.created_at, a.updated_at
         FROM online_accounts a
         WHERE POSITION($1 IN a.display_name_normalized) > 0
+          AND COALESCE(a.profile_payload->>'moderationState', 'active') = 'active'
           AND (
             $2::text IS NULL
             OR a.account_id = $2
@@ -621,6 +631,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         FROM online_account_follows f
         INNER JOIN online_accounts a ON a.account_id = f.followed_account_id
         WHERE f.follower_account_id = $1
+          AND COALESCE(a.profile_payload->>'moderationState', 'active') = 'active'
           AND NOT EXISTS (
             SELECT 1 FROM online_account_blocks b
             WHERE b.blocker_account_id = f.followed_account_id
@@ -644,8 +655,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     createdAt: string
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
+    if ((await this.getAccountModerationState(followerAccountId)) !== "active") return { status: "not_found" };
     const target = await this.loadAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if ((await this.moderationStateForAccount(target.accountId)) !== "active") return { status: "not_found" };
     if (target.accountId === followerAccountId) return { status: "self" };
     return this.withTransaction(async (queryable) => {
       await this.lockSocialPair(queryable, followerAccountId, target.accountId);
@@ -685,8 +698,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
+    if ((await this.getAccountModerationState(followerAccountId)) !== "active") return { status: "not_found" };
     const target = await this.loadAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if ((await this.moderationStateForAccount(target.accountId)) !== "active") return { status: "not_found" };
     if (target.accountId === followerAccountId) return { status: "self" };
     return this.withTransaction(async (queryable) => {
       await this.lockSocialPair(queryable, followerAccountId, target.accountId);
@@ -710,8 +725,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     createdAt: string
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
+    if ((await this.getAccountModerationState(blockerAccountId)) !== "active") return { status: "not_found" };
     const target = await this.loadAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if ((await this.moderationStateForAccount(target.accountId)) !== "active") return { status: "not_found" };
     if (target.accountId === blockerAccountId) return { status: "self" };
     return this.withTransaction(async (queryable) => {
       await this.lockSocialPair(queryable, blockerAccountId, target.accountId);
@@ -751,8 +768,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
+    if ((await this.getAccountModerationState(blockerAccountId)) !== "active") return { status: "not_found" };
     const target = await this.loadAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if ((await this.moderationStateForAccount(target.accountId)) !== "active") return { status: "not_found" };
     if (target.accountId === blockerAccountId) return { status: "self" };
     return this.withTransaction(async (queryable) => {
       await this.lockSocialPair(queryable, blockerAccountId, target.accountId);
@@ -778,6 +797,8 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       const reporter = await this.loadAccountById(input.reporterAccountId, queryable);
       const target = await this.loadAccountByDisplayName(input.targetDisplayName, queryable);
       if (!reporter || !target) return { status: "not_found" };
+      if ((await this.moderationStateForAccount(reporter.accountId, queryable)) !== "active") return { status: "not_found" };
+      if ((await this.moderationStateForAccount(target.accountId, queryable)) !== "active") return { status: "not_found" };
       if (target.accountId === reporter.accountId) return { status: "self" };
       if (await this.hasBlock(target.accountId, reporter.accountId, queryable)) {
         return { status: "not_found" };
@@ -966,6 +987,47 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     });
   }
 
+  async updateAccountModerationState(
+    displayName: string,
+    moderationState: OnlineAccountModerationState,
+    updatedAt: string
+  ): Promise<OnlineAccountModerationStateUpdateResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(displayName);
+    if (!target) return { status: "not_found" };
+    const current = await this.moderationStateForAccount(target.accountId);
+    if (current === moderationState) return { status: "unchanged" };
+    const nextPayload = {
+      moderationState,
+      moderationUpdatedAt: updatedAt,
+    };
+    await this.mergeProfilePayloadFields(target.accountId, nextPayload, updatedAt);
+    return {
+      status: "ok",
+      account: {
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        displayName: target.displayName,
+        moderationState,
+        updatedAt,
+      },
+    };
+  }
+
+  async getAccountModerationState(accountId: string): Promise<OnlineAccountModerationState | null> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "SELECT profile_payload FROM online_accounts WHERE account_id = $1 LIMIT 1",
+      [accountId]
+    );
+    if (result.rows.length === 0) return null;
+    const payload = result.rows[0]?.profile_payload;
+    return this.moderationStateFromProfilePayload(
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    );
+  }
+
   async listAccountReportAudits(
     options: ListOnlineAccountReportAuditsOptions
   ): Promise<OnlineAccountReportAuditListResult> {
@@ -1010,8 +1072,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     targetDisplayName: string
   ): Promise<OnlineAccountChallengeTargetResult> {
     await this.ensureSchema();
+    if ((await this.getAccountModerationState(challengerAccountId)) !== "active") return { status: "not_found" };
     const target = await this.loadAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if ((await this.moderationStateForAccount(target.accountId)) !== "active") return { status: "not_found" };
     if (target.accountId === challengerAccountId) return { status: "self" };
     return this.withTransaction(async (queryable) => {
       await this.lockSocialPair(queryable, challengerAccountId, target.accountId);
@@ -1062,6 +1126,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     await this.ensureSchema();
     const account = await this.loadAccountById(accountId);
     if (!account) return null;
+    if ((await this.getAccountModerationState(accountId)) !== "active") return null;
     const current = await this.getPrivacySettings(accountId);
     const next = {
       ...current,
@@ -1096,22 +1161,22 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     updatedAt: string
   ): Promise<OnlineAccountPublicProfile | null> {
     await this.ensureSchema();
-    const account = await this.loadAccountById(accountId);
-    if (!account) return null;
-    const currentPayload = await this.loadProfilePayload(accountId);
     const nextPayload = {
-      ...currentPayload,
       ...(patch.avatar ? { avatar: patch.avatar } : {}),
     };
-    await this.queryable.query(
+    const result = await this.queryable.query(
       `
         UPDATE online_accounts
-        SET profile_payload = $2::jsonb, updated_at = $3
+        SET profile_payload = COALESCE(profile_payload, '{}'::jsonb) || $2::jsonb,
+            updated_at = $3
         WHERE account_id = $1
+          AND COALESCE(profile_payload->>'moderationState', 'active') = 'active'
+        RETURNING account_id, display_name, created_at, updated_at
       `,
       [accountId, JSON.stringify(nextPayload), updatedAt]
     );
-    return this.createProfile(accountId, { ...account, updatedAt }, this.queryable, updatedAt);
+    if (result.rows.length === 0) return null;
+    return this.createProfile(accountId, accountFromRow(result.rows[0]), this.queryable, updatedAt);
   }
 
   async checkReady(): Promise<boolean> {
@@ -1596,6 +1661,45 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return payload && typeof payload === "object" && !Array.isArray(payload)
       ? { ...(payload as Record<string, unknown>) }
       : {};
+  }
+
+  private async mergeProfilePayloadFields(
+    accountId: string,
+    fields: Record<string, unknown>,
+    updatedAt: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        UPDATE online_accounts
+        SET profile_payload = COALESCE(profile_payload, '{}'::jsonb) || $2::jsonb,
+            updated_at = $3
+        WHERE account_id = $1
+      `,
+      [accountId, JSON.stringify(fields), updatedAt]
+    );
+  }
+
+  private moderationStateFromProfilePayload(payload: Record<string, unknown>): OnlineAccountModerationState {
+    return typeof payload.moderationState === "string" &&
+      ONLINE_ACCOUNT_MODERATION_STATES.has(payload.moderationState as OnlineAccountModerationState)
+      ? payload.moderationState as OnlineAccountModerationState
+      : "active";
+  }
+
+  private async moderationStateForAccount(
+    accountId: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OnlineAccountModerationState> {
+    return this.moderationStateFromProfilePayload(await this.loadProfilePayload(accountId, queryable));
+  }
+
+  private async canExposeAccount(
+    accountId: string,
+    viewerAccountId: string | null,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<boolean> {
+    return (await this.moderationStateForAccount(accountId, queryable)) === "active" || viewerAccountId === accountId;
   }
 
   private async loadAccountAvatar(

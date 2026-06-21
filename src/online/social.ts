@@ -14,6 +14,7 @@ export const ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION = 2;
 export type OnlineRatingLeaderboardScope = "global" | "following";
 export type OnlineAccountReportReason = "abuse" | "cheating" | "spam" | "impersonation" | "other";
 export type OnlineAccountReportStatus = "open" | "resolved" | "dismissed";
+export type OnlineAccountModerationState = "active" | "limited" | "report_locked";
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
@@ -212,6 +213,23 @@ export interface OnlineAccountModerationReportStatusPatch {
   note: string;
 }
 
+export interface OnlineAccountModerationStatePatch {
+  moderationState: OnlineAccountModerationState;
+}
+
+export interface OnlineAccountModerationAccountState {
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  displayName: string;
+  moderationState: OnlineAccountModerationState;
+  updatedAt: string;
+}
+
+export interface OnlineAccountModerationAccountStateResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  account: OnlineAccountModerationAccountState;
+}
+
 export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
@@ -292,6 +310,11 @@ export const ONLINE_ACCOUNT_REPORT_STATUSES = new Set<OnlineAccountReportStatus>
   "open",
   "resolved",
   "dismissed",
+]);
+export const ONLINE_ACCOUNT_MODERATION_STATES = new Set<OnlineAccountModerationState>([
+  "active",
+  "limited",
+  "report_locked",
 ]);
 export const ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH = 1_000;
 export const ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH = 1_000;
@@ -502,6 +525,32 @@ export function parseOnlineAccountModerationReportStatusPatch(
     value: {
       status: value.status as OnlineAccountReportStatus,
       note: normalizedNote,
+    },
+  };
+}
+
+export function parseOnlineAccountModerationStatePatch(
+  value: unknown
+): ValidationResult<OnlineAccountModerationStatePatch> {
+  if (!isRecord(value)) return bad("Account moderation state update must be an object.");
+
+  if (
+    typeof value.moderationState !== "string" ||
+    !ONLINE_ACCOUNT_MODERATION_STATES.has(value.moderationState as OnlineAccountModerationState)
+  ) {
+    return bad("Account moderation state is invalid.");
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key !== "moderationState") {
+      return bad("Account moderation state update contains an unsupported field.");
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      moderationState: value.moderationState as OnlineAccountModerationState,
     },
   };
 }

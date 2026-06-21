@@ -128,6 +128,7 @@ class FakeAccountQueryable {
           const account = this.accounts.get(accountId);
           return account ? [{ display_name: account.display_name, profile_payload: account.profile_payload, payload: rating }] : [];
         })
+        .filter((row) => isActiveFakeAccountPayload(row.profile_payload))
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
           if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
@@ -157,6 +158,7 @@ class FakeAccountQueryable {
           const rating = this.ratingRows.get(accountId);
           return account && rating ? [{ display_name: account.display_name, profile_payload: account.profile_payload, payload: rating }] : [];
         })
+        .filter((row) => isActiveFakeAccountPayload(row.profile_payload))
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
           if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
@@ -353,10 +355,28 @@ class FakeAccountQueryable {
       const [accountId, payload, updatedAt] = values as string[];
       const account = this.accounts.get(accountId);
       if (account) {
-        account.profile_payload = typeof payload === "string" ? JSON.parse(payload) : payload;
+        const patch = typeof payload === "string" ? JSON.parse(payload) : payload;
+        if (
+          normalizedText.includes("COALESCE(profile_payload->>'moderationState', 'active') = 'active'") &&
+          !isActiveFakeAccountPayload(account.profile_payload)
+        ) {
+          return { rows: [] };
+        }
+        account.profile_payload = normalizedText.includes("COALESCE(profile_payload, '{}'::jsonb) || $2::jsonb")
+          ? { ...(account.profile_payload ?? {}), ...patch }
+          : patch;
         account.updated_at = updatedAt;
       }
-      return { rows: [] };
+      return {
+        rows: account && normalizedText.includes("RETURNING account_id")
+          ? [{
+              account_id: account.account_id,
+              display_name: account.display_name,
+              created_at: account.created_at,
+              updated_at: account.updated_at,
+            }]
+          : [],
+      };
     }
 
     if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
@@ -382,6 +402,7 @@ class FakeAccountQueryable {
       const [queryKey, viewerAccountId, limit] = values as [string, string | null, number];
       const rows = Array.from(this.accounts.values())
         .filter((account) => String(account.display_name_normalized).includes(queryKey))
+        .filter((account) => isActiveFakeAccountPayload(account.profile_payload))
         .filter((account) => {
           if (viewerAccountId === null || account.account_id === viewerAccountId) return true;
           return (
@@ -456,6 +477,7 @@ class FakeAccountQueryable {
         .filter(([left]) => left === followerAccountId)
         .map(([, followed]) => this.accounts.get(followed))
         .filter((account): account is any => !!account)
+        .filter((account) => isActiveFakeAccountPayload(account.profile_payload))
         .filter((account) => !this.blocks.has(socialKey(account.account_id, followerAccountId)))
         .filter((account) => !this.blocks.has(socialKey(followerAccountId, account.account_id)))
         .sort((left, right) => String(left.display_name).localeCompare(String(right.display_name)));
@@ -662,6 +684,12 @@ class FakeAccountQueryable {
 
 function socialKey(left: string, right: string): string {
   return `${left}\u0000${right}`;
+}
+
+function isActiveFakeAccountPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return true;
+  const moderationState = (payload as { moderationState?: unknown }).moderationState;
+  return moderationState === undefined || moderationState === "active";
 }
 
 function externalLoginKey(provider: string, providerSubject: string): string {
@@ -1363,6 +1391,118 @@ describe("PostgresOnlineAccountStore", () => {
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
   });
 
+  it("keeps sanctioned accounts out of public discovery and new challenges", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    for (const [accountId, displayName, createdAt] of [
+      ["account_liam", "Liam", "2026-06-03T12:00:00.000Z"],
+      ["account_samir", "Samir", "2026-06-03T12:01:00.000Z"],
+      ["account_ada", "Ada", "2026-06-03T12:02:00.000Z"],
+    ] as const) {
+      await store.createAccount({
+        accountId,
+        sessionId: `account_session_${accountId}`,
+        displayName,
+        passwordHash: TEST_PASSWORD_HASH,
+        tokenHash: hashOnlineToken(`token-${accountId}`),
+        createdAt,
+      });
+    }
+    await store.followAccount("account_liam", "Samir", "2026-06-03T12:03:00.000Z");
+    await store.followAccount("account_liam", "Ada", "2026-06-03T12:03:30.000Z");
+    queryable.ratingRows.set("account_samir", {
+      ...createDefaultOnlineRating("2026-06-03T12:04:00.000Z"),
+      rating: 1800,
+      deviation: 80,
+      games: 12,
+    });
+    queryable.ratingRows.set("account_ada", {
+      ...createDefaultOnlineRating("2026-06-03T12:05:00.000Z"),
+      rating: 1600,
+      deviation: 80,
+      games: 12,
+    });
+
+    await expect(
+      store.updateAccountModerationState("Samir", "report_locked", "2026-06-03T12:06:00.000Z")
+    ).resolves.toEqual({
+      status: "ok",
+      account: {
+        schemaVersion: 2,
+        displayName: "Samir",
+        moderationState: "report_locked",
+        updatedAt: "2026-06-03T12:06:00.000Z",
+      },
+    });
+    await expect(
+      store.updateAccountModerationState("Samir", "report_locked", "2026-06-03T12:07:00.000Z")
+    ).resolves.toEqual({ status: "unchanged" });
+
+    await expect(store.getProfileForDisplayName(null, "Samir")).resolves.toBeNull();
+    await expect(store.getProfileForDisplayName("account_samir", "Samir")).resolves.toMatchObject({
+      displayName: "Samir",
+      relationship: { self: true },
+    });
+    await expect(store.resolveAccountIdForDisplayName("Samir")).resolves.toBeNull();
+    await expect(store.searchProfiles("account_liam", "Sam", 10)).resolves.toEqual([]);
+    await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([
+      expect.objectContaining({ displayName: "Ada" }),
+    ]);
+    await expect(store.listRatingLeaderboard(10)).resolves.toEqual([
+      expect.objectContaining({ displayName: "Ada" }),
+    ]);
+    await expect(store.listFollowingRatingLeaderboard("account_liam", 10)).resolves.toEqual([
+      expect.objectContaining({ displayName: "Ada" }),
+    ]);
+    await expect(store.followAccount("account_liam", "Samir", "2026-06-03T12:08:00.000Z")).resolves.toEqual({
+      status: "not_found",
+    });
+    await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toEqual({
+      status: "not_found",
+    });
+
+    await expect(
+      store.updateAccountModerationState("Liam", "limited", "2026-06-03T12:09:00.000Z")
+    ).resolves.toMatchObject({
+      status: "ok",
+      account: { displayName: "Liam", moderationState: "limited" },
+    });
+    await expect(store.followAccount("account_liam", "Ada", "2026-06-03T12:09:10.000Z")).resolves.toEqual({
+      status: "not_found",
+    });
+    await expect(store.blockAccount("account_liam", "Ada", "2026-06-03T12:09:20.000Z")).resolves.toEqual({
+      status: "not_found",
+    });
+    await expect(store.resolveChallengeTarget("account_liam", "Ada")).resolves.toEqual({
+      status: "not_found",
+    });
+    await expect(
+      store.updatePrivacySettings(
+        "account_liam",
+        { followPolicy: "nobody" },
+        "2026-06-03T12:09:30.000Z"
+      )
+    ).resolves.toBeNull();
+    await expect(
+      store.updateProfileSettings(
+        "account_liam",
+        { avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } },
+        "2026-06-03T12:09:40.000Z"
+      )
+    ).resolves.toBeNull();
+    await expect(
+      store.submitAccountReport({
+        reportId: "report_limited_liam_ada",
+        reporterAccountId: "account_liam",
+        targetDisplayName: "Ada",
+        reason: "abuse",
+        details: "Limited accounts cannot create new reports.",
+        createdAt: "2026-06-03T12:10:00.000Z",
+      })
+    ).resolves.toEqual({ status: "not_found" });
+  });
+
   it("persists built-in avatar profile settings across public profile reads", async () => {
     const queryable = new FakeAccountQueryable();
     const store = createStore(queryable);
@@ -1397,20 +1537,28 @@ describe("PostgresOnlineAccountStore", () => {
       relationship: { self: false },
     });
     await expect(
+      store.updateAccountModerationState("Liam", "report_locked", "2026-06-03T12:05:30.000Z")
+    ).resolves.toMatchObject({
+      status: "ok",
+      account: { displayName: "Liam", moderationState: "report_locked" },
+    });
+    expect(queryable.accounts.get("account_liam")?.profile_payload).toMatchObject({
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      moderationState: "report_locked",
+      moderationUpdatedAt: "2026-06-03T12:05:30.000Z",
+    });
+    await expect(
       store.updateProfileSettings(
         "account_liam",
         { avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL } },
         "2026-06-03T12:06:00.000Z"
       )
-    ).resolves.toMatchObject({
+    ).resolves.toBeNull();
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toBeNull();
+    await expect(store.getProfileForDisplayName("account_liam", "Liam")).resolves.toMatchObject({
       displayName: "Liam",
-      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
       relationship: { self: true },
-    });
-    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
-      displayName: "Liam",
-      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
-      relationship: { self: false },
     });
     expect(JSON.stringify(await store.getProfileForDisplayName(null, "Liam"))).not.toContain("account_liam");
   });

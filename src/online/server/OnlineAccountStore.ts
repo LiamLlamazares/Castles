@@ -12,6 +12,8 @@ import {
   defaultOnlineAccountPrivacySettings,
   defaultOnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
+  type OnlineAccountModerationAccountState,
+  type OnlineAccountModerationState,
   type OnlineAccountModerationReport,
   type OnlineAccountProfilePatch,
   type OnlineAccountPrivacyPatch,
@@ -133,6 +135,15 @@ export type OnlineAccountReportStatusUpdateResult =
       status: "not_found" | "unchanged";
     };
 
+export type OnlineAccountModerationStateUpdateResult =
+  | {
+      status: "ok";
+      account: OnlineAccountModerationAccountState;
+    }
+  | {
+      status: "not_found" | "unchanged";
+    };
+
 export type OnlineAccountReportAuditListResult =
   | {
       status: "ok";
@@ -196,6 +207,8 @@ export interface OnlineAccountStore {
   submitAccountReport(input: SubmitOnlineAccountReportStoreInput): Promise<OnlineAccountReportSubmissionResult>;
   listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]>;
   updateAccountReportStatus(input: UpdateOnlineAccountReportStatusInput): Promise<OnlineAccountReportStatusUpdateResult>;
+  getAccountModerationState(accountId: string): Promise<OnlineAccountModerationState | null>;
+  updateAccountModerationState(displayName: string, moderationState: OnlineAccountModerationState, updatedAt: string): Promise<OnlineAccountModerationStateUpdateResult>;
   listAccountReportAudits(options: ListOnlineAccountReportAuditsOptions): Promise<OnlineAccountReportAuditListResult>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
@@ -250,6 +263,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly blocks = new Map<string, Set<string>>();
   private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
   private readonly profileSettings = new Map<string, OnlineAccountProfilePatch>();
+  private readonly moderationStates = new Map<string, { moderationState: OnlineAccountModerationState; updatedAt: string }>();
   private readonly reports: MemoryOnlineAccountReportRecord[] = [];
   private readonly reportAudits: OnlineAccountModerationAuditEntry[] = [];
 
@@ -451,6 +465,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       if (login.accountId === accountId) this.externalLoginsByKey.delete(key);
     }
     this.privacySettings.delete(accountId);
+    this.moderationStates.delete(accountId);
     this.following.delete(accountId);
     this.blocks.delete(accountId);
     for (const followed of this.following.values()) followed.delete(accountId);
@@ -490,7 +505,9 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   }
 
   async resolveAccountIdForDisplayName(displayName: string): Promise<string | null> {
-    return this.getAccountByDisplayName(displayName)?.accountId ?? null;
+    const account = this.getAccountByDisplayName(displayName);
+    if (!account || this.moderationStateForAccount(account.accountId) !== "active") return null;
+    return account.accountId;
   }
 
   async getProfileForDisplayName(
@@ -500,6 +517,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   ): Promise<OnlineAccountPublicProfile | null> {
     const target = this.getAccountByDisplayName(displayName);
     if (!target) return null;
+    if (!this.canExposeAccount(target.accountId, viewerAccountId)) return null;
     if (viewerAccountId !== null && target.accountId !== viewerAccountId && this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
@@ -522,6 +540,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
         return displayKey.includes(queryKey);
       })
       .filter((account) => {
+        if (this.moderationStateForAccount(account.accountId) !== "active") return false;
         if (viewerAccountId === null || viewerAccountId === account.accountId) return true;
         return !this.hasBlock(account.accountId, viewerAccountId) && !this.hasBlock(viewerAccountId, account.accountId);
       })
@@ -542,6 +561,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     const profiles = await Promise.all(followedAccountIds
       .map((targetAccountId) => this.accounts.get(targetAccountId))
       .filter((account): account is OnlineAccount => !!account)
+      .filter((account) => this.moderationStateForAccount(account.accountId) === "active")
       .filter((account) => !this.hasBlock(account.accountId, accountId) && !this.hasBlock(accountId, account.accountId))
       .map((account) => this.createProfile(accountId, account, viewedAt)));
     return profiles.sort((left, right) => left.displayName.localeCompare(right.displayName));
@@ -552,8 +572,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     targetDisplayName: string,
     _createdAt: string
   ): Promise<OnlineAccountSocialActionResult> {
+    if (!this.isActiveAccount(followerAccountId)) return { status: "not_found" };
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === followerAccountId) return { status: "self" };
     if (this.hasBlock(followerAccountId, target.accountId) || this.hasBlock(target.accountId, followerAccountId)) {
       return { status: "blocked" };
@@ -578,8 +600,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     targetDisplayName: string,
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
+    if (!this.isActiveAccount(followerAccountId)) return { status: "not_found" };
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === followerAccountId) return { status: "self" };
     this.following.get(followerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, followerAccountId)) return { status: "blocked" };
@@ -591,8 +615,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     targetDisplayName: string,
     _createdAt: string
   ): Promise<OnlineAccountSocialActionResult> {
+    if (!this.isActiveAccount(blockerAccountId)) return { status: "not_found" };
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === blockerAccountId) return { status: "self" };
     this.getOrCreateSet(this.blocks, blockerAccountId).add(target.accountId);
     this.following.get(blockerAccountId)?.delete(target.accountId);
@@ -609,8 +635,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     targetDisplayName: string,
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
+    if (!this.isActiveAccount(blockerAccountId)) return { status: "not_found" };
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === blockerAccountId) return { status: "self" };
     this.blocks.get(blockerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
@@ -623,6 +651,8 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     const reporter = this.accounts.get(input.reporterAccountId);
     const target = this.getAccountByDisplayName(input.targetDisplayName);
     if (!reporter || !target) return { status: "not_found" };
+    if (this.moderationStateForAccount(reporter.accountId) !== "active") return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === reporter.accountId) return { status: "self" };
     if (this.hasBlock(target.accountId, reporter.accountId)) return { status: "not_found" };
     this.reports.push({
@@ -727,12 +757,40 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     };
   }
 
+  async updateAccountModerationState(
+    displayName: string,
+    moderationState: OnlineAccountModerationState,
+    updatedAt: string
+  ): Promise<OnlineAccountModerationStateUpdateResult> {
+    const target = this.getAccountByDisplayName(displayName);
+    if (!target) return { status: "not_found" };
+    const current = this.moderationStateForAccount(target.accountId);
+    if (current === moderationState) return { status: "unchanged" };
+    this.moderationStates.set(target.accountId, { moderationState, updatedAt });
+    this.accounts.set(target.accountId, { ...target, updatedAt });
+    return {
+      status: "ok",
+      account: {
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        displayName: target.displayName,
+        moderationState,
+        updatedAt,
+      },
+    };
+  }
+
+  async getAccountModerationState(accountId: string): Promise<OnlineAccountModerationState | null> {
+    return this.accounts.has(accountId) ? this.moderationStateForAccount(accountId) : null;
+  }
+
   async resolveChallengeTarget(
     challengerAccountId: string,
     targetDisplayName: string
   ): Promise<OnlineAccountChallengeTargetResult> {
+    if (!this.isActiveAccount(challengerAccountId)) return { status: "not_found" };
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
+    if (this.moderationStateForAccount(target.accountId) !== "active") return { status: "not_found" };
     if (target.accountId === challengerAccountId) return { status: "self" };
     if (this.hasBlock(challengerAccountId, target.accountId) || this.hasBlock(target.accountId, challengerAccountId)) {
       return { status: "blocked" };
@@ -755,6 +813,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     updatedAt: string
   ): Promise<OnlineAccountPrivacySettings | null> {
     if (!this.accounts.has(accountId)) return null;
+    if (!this.isActiveAccount(accountId)) return null;
     const current = await this.getPrivacySettings(accountId);
     const updated: OnlineAccountPrivacySettings = {
       ...current,
@@ -772,6 +831,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   ): Promise<OnlineAccountPublicProfile | null> {
     const account = this.accounts.get(accountId);
     if (!account) return null;
+    if (!this.isActiveAccount(accountId)) return null;
     const current = this.profileSettings.get(accountId) ?? {};
     this.profileSettings.set(accountId, {
       ...current,
@@ -793,6 +853,18 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (!normalized.ok) return null;
     const accountId = this.displayNameKeys.get(normalizeOnlineAccountDisplayNameKey(normalized.value));
     return accountId ? this.accounts.get(accountId) ?? null : null;
+  }
+
+  private moderationStateForAccount(accountId: string): OnlineAccountModerationState {
+    return this.moderationStates.get(accountId)?.moderationState ?? "active";
+  }
+
+  private isActiveAccount(accountId: string): boolean {
+    return this.accounts.has(accountId) && this.moderationStateForAccount(accountId) === "active";
+  }
+
+  private canExposeAccount(accountId: string, viewerAccountId: string | null): boolean {
+    return this.moderationStateForAccount(accountId) === "active" || viewerAccountId === accountId;
   }
 
   private validateExternalLoginInput(input: CreateOnlineAccountExternalSessionInput): void {

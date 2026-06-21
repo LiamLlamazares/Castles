@@ -585,6 +585,81 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByRole("button", { name: "Delete Account" })).not.toBeInTheDocument();
   });
 
+  it("moves full player discovery to the People surface when a People route is available", async () => {
+    const account = accountFixture("Liam");
+    const loadAccountFollowing = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      following: [],
+    });
+    const onOpenPeople = vi.fn();
+
+    const { rerender } = render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        loadAccountProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: publicProfile("Liam", { self: true }),
+        })}
+        loadAccountFollowing={loadAccountFollowing}
+        onFollowAccount={vi.fn()}
+        onUnfollowAccount={vi.fn()}
+        onBlockAccount={vi.fn()}
+        onUnblockAccount={vi.fn()}
+        onOpenPeople={onOpenPeople}
+        onOpenProfile={vi.fn()}
+      />
+    );
+
+    const handoff = await screen.findByRole("region", { name: "People and challenges" });
+    expect(handoff).toHaveTextContent("Player search, following, rating leaders, and account challenges now live on the People page.");
+    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lobby games" })).toBeInTheDocument();
+
+    fireEvent.click(within(handoff).getByRole("button", { name: "Open People" }));
+    expect(onOpenPeople).toHaveBeenCalledTimes(1);
+
+    const peopleLoadGames = vi.fn().mockResolvedValue(directory([]));
+    const peopleLoadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([]));
+
+    rerender(
+      <OnlineGameBrowser
+        surface="people"
+        initialTab="lobby"
+        loadGames={peopleLoadGames}
+        loadOpenSeeks={peopleLoadOpenSeeks}
+        onBack={vi.fn()}
+        onOpenOnlineBrowser={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        loadAccountProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: publicProfile("Liam", { self: true }),
+        })}
+        loadAccountFollowing={loadAccountFollowing}
+        onFollowAccount={vi.fn()}
+        onUnfollowAccount={vi.fn()}
+        onBlockAccount={vi.fn()}
+        onUnblockAccount={vi.fn()}
+        onOpenProfile={vi.fn()}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    expect(within(people).getByRole("textbox", { name: "Search account name" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "People and challenges" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lobby games" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "People navigation" })).toBeInTheDocument();
+    expect(peopleLoadGames).not.toHaveBeenCalled();
+    expect(peopleLoadOpenSeeks).not.toHaveBeenCalled();
+  });
+
   it("lets signed-in players find, follow, and block accounts without account settings controls", async () => {
     const account = accountFixture("Liam");
     const visibleProfile = publicProfile("Samir");
@@ -2695,7 +2770,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(challenges).getByText("No account challenges yet.")).toBeInTheDocument();
   });
 
-  it("synchronizes the count-only Online navigation badge after declining an inbox challenge", async () => {
+  it("synchronizes the count-only People navigation badge after declining an inbox challenge", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
     const declinedSummary = {
@@ -2723,12 +2798,14 @@ describe("OnlineGameBrowser", () => {
       const [onlineNotificationCount, setOnlineNotificationCount] = React.useState(1);
       return (
         <OnlineGameBrowser
+          surface="people"
           initialTab="lobby"
           loadGames={loadGames}
           loadOpenSeeks={loadOpenSeeks}
           onBack={onBack}
           onSpectate={onSpectate}
           onReplay={onReplay}
+          onOpenOnlineBrowser={vi.fn()}
           account={account}
           accountStatus="ready"
           {...socialPropsWithFollowing()}
@@ -2743,7 +2820,7 @@ describe("OnlineGameBrowser", () => {
 
     render(<BrowserWithParentNotificationState />);
 
-    expect(await screen.findByRole("button", { name: "Online, 1 challenge activity" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: "People, 1 challenge activity" })).toHaveAttribute(
       "aria-current",
       "page"
     );
@@ -2758,9 +2835,9 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onDeclineAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
     expect(await within(challenges).findByText("No account challenges yet.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page")
+      expect(screen.getByRole("button", { name: "People" })).toHaveAttribute("aria-current", "page")
     );
-    expect(screen.queryByRole("button", { name: "Online, 1 challenge activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "People, 1 challenge activity" })).not.toBeInTheDocument();
   });
 
   it("offers block and report actions from registered account challenge rows", async () => {

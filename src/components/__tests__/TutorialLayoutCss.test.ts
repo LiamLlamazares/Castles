@@ -135,6 +135,8 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.app-shell-nav-actions > \*\s*\{[^}]*width:\s*100%;/s);
     expect(css).toContain(".app-shell-destination-label");
     expect(css).toContain(".app-shell-back-label");
+    expect(css).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.app-shell-nav-primary\s*\{[^}]*flex-wrap:\s*wrap;[^}]*overflow:\s*visible;/s);
+    expect(css).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.app-shell-destinations\s*\{[^}]*flex:\s*1 0 100%;[^}]*width:\s*100%;/s);
     expect(css).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.app-shell-back-label\s*\{[^}]*display:\s*none;/s);
     expect(css).toContain(".setup-sidebar .app-shell-destination");
     expect(css).toContain("font-family: \"Inter\", system-ui");
