@@ -67,6 +67,10 @@ type OnlineFriendFilter = "all" | "followed";
 type OnlineFollowingPresenceFilter = "all" | "online";
 type OnlineAccountChallengeFilter = NonNullable<FetchOnlineAccountChallengesOptions["state"]>;
 type OnlineAccountChallengeIntent = "challenge" | "rematch";
+
+const RATING_LEADERBOARD_POLICY_COPY =
+  "Beta ratings only; provisional players keep the ? marker until their rating settles.";
+
 interface OnlineAccountChallengeActionOptions {
   intent?: OnlineAccountChallengeIntent;
   sourceGameId?: string;
@@ -4129,39 +4133,42 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ) : ratingLeaderboardEntries.length === 0 ? (
                 <p>{ratingLeaderboardScope === "following" ? "No followed players have rated games yet." : "No rated games yet."}</p>
               ) : (
-                <div className="online-browser-following-rows">
-                  {ratingLeaderboardEntries.map((entry, index) => {
-                    const suffix = entry.rating.games === 1 ? "rated game" : "rated games";
-                    return (
-                      <article key={entry.displayName} className="online-browser-following-row online-browser-rating-leader-row">
-                        <div>
-                          <strong>
-                            <span className="online-browser-rating-rank">{index + 1}</span>
-                            {onOpenProfile ? (
-                              <button
-                                type="button"
-                                className="online-game-player-link"
-                                onClick={() => onOpenProfile(entry.displayName)}
-                                aria-label={`Open ${entry.displayName} profile from rating leaders`}
-                              >
-                                {entry.displayName}
-                              </button>
-                            ) : (
-                              entry.displayName
-                            )}
-                          </strong>
-                          <div className="online-browser-social-badges">
-                            <span className="online-browser-rating-badge" title={`${entry.rating.games} ${suffix}`}>
-                              {entry.rating.display}
-                            </span>
-                            <span>{entry.rating.provisional ? "Provisional" : "Established"}</span>
-                            <span>{formatCount(entry.rating.games, "rated game")}</span>
+                <>
+                  <p className="online-browser-rating-policy-note">{RATING_LEADERBOARD_POLICY_COPY}</p>
+                  <div className="online-browser-following-rows">
+                    {ratingLeaderboardEntries.map((entry, index) => {
+                      const suffix = entry.rating.games === 1 ? "rated game" : "rated games";
+                      return (
+                        <article key={entry.displayName} className="online-browser-following-row online-browser-rating-leader-row">
+                          <div>
+                            <strong>
+                              <span className="online-browser-rating-rank">{index + 1}</span>
+                              {onOpenProfile ? (
+                                <button
+                                  type="button"
+                                  className="online-game-player-link"
+                                  onClick={() => onOpenProfile(entry.displayName)}
+                                  aria-label={`Open ${entry.displayName} profile from rating leaders`}
+                                >
+                                  {entry.displayName}
+                                </button>
+                              ) : (
+                                entry.displayName
+                              )}
+                            </strong>
+                            <div className="online-browser-social-badges">
+                              <span className="online-browser-rating-badge" title={`${entry.rating.games} ${suffix}`}>
+                                {entry.rating.display}
+                              </span>
+                              <span>{entry.rating.provisional ? "Provisional" : "Established"}</span>
+                              <span>{formatCount(entry.rating.games, "rated game")}</span>
+                            </div>
                           </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </section>
           )}

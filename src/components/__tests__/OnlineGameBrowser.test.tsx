@@ -964,6 +964,7 @@ describe("OnlineGameBrowser", () => {
     const people = await screen.findByRole("region", { name: "People" });
     const leaders = await within(people).findByRole("region", { name: "Rating leaders" });
     expect(leaders).toHaveTextContent("Rating leaders");
+    expect(leaders).toHaveTextContent("Beta ratings only; provisional players keep the ? marker until their rating settles.");
     expect(leaders).toHaveTextContent("2 players");
     const rows = within(leaders).getAllByRole("article");
     expect(rows).toHaveLength(2);

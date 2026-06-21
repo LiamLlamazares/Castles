@@ -26,7 +26,11 @@ import {
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
-import { createDefaultOnlineRating, validateOnlineRating } from "../ratings";
+import {
+  ONLINE_RATING_LEADERBOARD_MIN_GAMES,
+  createDefaultOnlineRating,
+  validateOnlineRating,
+} from "../ratings";
 import {
   CreateOnlineAccountStoreInput,
   CreateOnlineAccountExternalSessionInput,
@@ -494,14 +498,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         SELECT a.display_name, a.profile_payload, r.payload
         FROM online_account_ratings r
         INNER JOIN online_accounts a ON a.account_id = r.account_id
+        WHERE (r.payload->>'games')::integer >= $1
         ORDER BY
           (r.payload->>'rating')::double precision DESC,
           (r.payload->>'games')::integer DESC,
           lower(a.display_name) ASC,
           a.display_name ASC
-        LIMIT $1
+        LIMIT $2
       `,
-      [boundedLimit]
+      [ONLINE_RATING_LEADERBOARD_MIN_GAMES, boundedLimit]
     );
     return this.ratingLeaderboardRows(result.rows);
   }
@@ -532,14 +537,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         FROM visible_accounts v
         INNER JOIN online_accounts a ON a.account_id = v.account_id
         INNER JOIN online_account_ratings r ON r.account_id = v.account_id
+        WHERE (r.payload->>'games')::integer >= $2
         ORDER BY
           (r.payload->>'rating')::double precision DESC,
           (r.payload->>'games')::integer DESC,
           lower(a.display_name) ASC,
           a.display_name ASC
-        LIMIT $2
+        LIMIT $3
       `,
-      [accountId, boundedLimit]
+      [accountId, ONLINE_RATING_LEADERBOARD_MIN_GAMES, boundedLimit]
     );
     return this.ratingLeaderboardRows(result.rows);
   }

@@ -121,8 +121,9 @@ class FakeAccountQueryable {
     }
 
     if (normalizedText.startsWith("SELECT a.display_name, a.profile_payload, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
-      const [limit] = values as number[];
+      const [minGames, limit] = values as number[];
       const rows = Array.from(this.ratingRows.entries())
+        .filter(([, rating]) => rating.games >= minGames)
         .flatMap(([accountId, rating]) => {
           const account = this.accounts.get(accountId);
           return account ? [{ display_name: account.display_name, profile_payload: account.profile_payload, payload: rating }] : [];
@@ -137,7 +138,7 @@ class FakeAccountQueryable {
     }
 
     if (normalizedText.startsWith("WITH visible_accounts AS")) {
-      const [viewerAccountId, limit] = values as [string, number];
+      const [viewerAccountId, minGames, limit] = values as [string, number, number];
       const visibleAccountIds = new Set([viewerAccountId]);
       for (const key of this.follows) {
         const [followerAccountId, followedAccountId] = splitSocialKey(key);
@@ -150,6 +151,7 @@ class FakeAccountQueryable {
         }
       }
       const rows = Array.from(visibleAccountIds)
+        .filter((accountId) => (this.ratingRows.get(accountId)?.games ?? 0) >= minGames)
         .flatMap((accountId) => {
           const account = this.accounts.get(accountId);
           const rating = this.ratingRows.get(accountId);
@@ -1728,6 +1730,14 @@ describe("PostgresOnlineAccountStore", () => {
       tokenHash: hashOnlineToken("token-cleo"),
       createdAt: "2026-06-03T12:02:00.000Z",
     });
+    await store.createAccount({
+      accountId: "account_fresh",
+      sessionId: "account_session_fresh",
+      displayName: "Fresh",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-fresh"),
+      createdAt: "2026-06-03T12:02:30.000Z",
+    });
     queryable.ratingRows.set("account_ada", {
       ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
       rating: 1520.4,
@@ -1751,6 +1761,12 @@ describe("PostgresOnlineAccountStore", () => {
       rating: 1900,
       deviation: 80,
       games: 2,
+    });
+    queryable.ratingRows.set("account_fresh", {
+      ...createDefaultOnlineRating("2026-06-03T12:07:00.000Z"),
+      rating: 2500,
+      deviation: 500,
+      games: 0,
     });
 
     const leaderboard = await store.listRatingLeaderboard(2);
@@ -1787,6 +1803,7 @@ describe("PostgresOnlineAccountStore", () => {
     expect(JSON.stringify(leaderboard)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(leaderboard)).not.toContain("deviation");
     expect(JSON.stringify(leaderboard)).not.toContain("volatility");
+    expect(JSON.stringify(leaderboard)).not.toContain("Fresh");
   });
 
   it("lists a sanitized following rating leaderboard for the viewer and visible followed accounts", async () => {
@@ -1799,6 +1816,7 @@ describe("PostgresOnlineAccountStore", () => {
       ["account_ben", "Ben", "2026-06-03T12:02:00.000Z"],
       ["account_cleo", "Cleo", "2026-06-03T12:03:00.000Z"],
       ["account_dana", "Dana", "2026-06-03T12:04:00.000Z"],
+      ["account_fresh", "Fresh", "2026-06-03T12:04:30.000Z"],
     ] as const) {
       await store.createAccount({
         accountId,
@@ -1812,6 +1830,7 @@ describe("PostgresOnlineAccountStore", () => {
     await store.followAccount("account_liam", "Ada", "2026-06-03T12:05:00.000Z");
     await store.followAccount("account_liam", "Ben", "2026-06-03T12:06:00.000Z");
     await store.followAccount("account_liam", "Dana", "2026-06-03T12:07:00.000Z");
+    await store.followAccount("account_liam", "Fresh", "2026-06-03T12:07:30.000Z");
     queryable.blocks.add(socialKey("account_ben", "account_liam"));
     queryable.ratingRows.set("account_liam", {
       ...createDefaultOnlineRating("2026-06-03T12:08:00.000Z"),
@@ -1836,6 +1855,12 @@ describe("PostgresOnlineAccountStore", () => {
       rating: 1900,
       deviation: 80,
       games: 30,
+    });
+    queryable.ratingRows.set("account_fresh", {
+      ...createDefaultOnlineRating("2026-06-03T12:12:00.000Z"),
+      rating: 2500,
+      deviation: 500,
+      games: 0,
     });
 
     const leaderboard = await store.listFollowingRatingLeaderboard("account_liam", 10);
@@ -1875,5 +1900,6 @@ describe("PostgresOnlineAccountStore", () => {
     expect(JSON.stringify(leaderboard)).not.toContain("Ben");
     expect(JSON.stringify(leaderboard)).not.toContain("Cleo");
     expect(JSON.stringify(leaderboard)).not.toContain("Dana");
+    expect(JSON.stringify(leaderboard)).not.toContain("Fresh");
   });
 });

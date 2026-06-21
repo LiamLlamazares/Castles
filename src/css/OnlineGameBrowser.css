@@ -616,6 +616,12 @@
   color: #bababa;
 }
 
+.online-browser-rating-policy-note {
+  max-width: 680px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .online-browser-private-note {
   display: grid;
   gap: 4px;

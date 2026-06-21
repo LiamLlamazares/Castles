@@ -335,8 +335,9 @@ class FakePostgresAccountQueryable {
     }
 
     if (normalizedText.startsWith("SELECT a.display_name, a.profile_payload, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
-      const [limit] = values as number[];
+      const [minGames, limit] = values as number[];
       const rows = Array.from(this.ratingRows.entries())
+        .filter(([, rating]) => rating.games >= minGames)
         .flatMap(([accountId, rating]) => {
           const account = this.accounts.get(accountId);
           return account ? [{ display_name: account.display_name, profile_payload: account.profile_payload ?? {}, payload: rating }] : [];
@@ -351,7 +352,7 @@ class FakePostgresAccountQueryable {
     }
 
     if (normalizedText.startsWith("WITH visible_accounts AS")) {
-      const [viewerAccountId, limit] = values as [string, number];
+      const [viewerAccountId, minGames, limit] = values as [string, number, number];
       const visibleAccountIds = new Set([viewerAccountId]);
       for (const key of this.follows) {
         const [followerAccountId, followedAccountId] = key.split("|");
@@ -364,6 +365,7 @@ class FakePostgresAccountQueryable {
         }
       }
       const rows = Array.from(visibleAccountIds)
+        .filter((accountId) => (this.ratingRows.get(accountId)?.games ?? 0) >= minGames)
         .flatMap((accountId) => {
           const account = this.accounts.get(accountId);
           const rating = this.ratingRows.get(accountId);
@@ -1788,6 +1790,7 @@ describe("createOnlineHttpServer", () => {
     const ada = await createAccountViaApi(port, "Ada");
     const ben = await createAccountViaApi(port, "Ben");
     const cleo = await createAccountViaApi(port, "Cleo");
+    const fresh = await createAccountViaApi(port, "Fresh");
     queryable.ratingRows.set(ada.account.accountId, {
       ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
       rating: 1490,
@@ -1805,6 +1808,12 @@ describe("createOnlineHttpServer", () => {
       rating: 1620,
       deviation: 80,
       games: 8,
+    });
+    queryable.ratingRows.set(fresh.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:05:30.000Z"),
+      rating: 2500,
+      deviation: 500,
+      games: 0,
     });
     queryable.ratingRows.set("account_deleted", {
       ...createDefaultOnlineRating("2026-06-03T12:06:00.000Z"),
@@ -1876,6 +1885,7 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(body)).not.toContain("deviation");
     expect(JSON.stringify(body)).not.toContain("volatility");
+    expect(JSON.stringify(body)).not.toContain("Fresh");
   });
 
   it("serves a following-scoped rating leaderboard for the authenticated account", async () => {
