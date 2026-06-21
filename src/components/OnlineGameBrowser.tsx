@@ -3803,6 +3803,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   );
   const showFullPeopleSurface = account && canUseAccountSocial && (isPeopleSurface || !onOpenPeople);
   const showOnlinePeopleHandoff = account && canUseAccountSocial && !isPeopleSurface && Boolean(onOpenPeople);
+  const showAccountProfileHandoff = account && (onOpenProfile || canUseAccountSocial) && !isPeopleSurface && !onOpenPeople;
+  const showProfileOwnedPeopleBlocks = showFullPeopleSurface && !isPeopleSurface;
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
@@ -3907,10 +3909,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         ariaLabel={isPeopleSurface ? "People navigation" : "Online navigation"}
         activeDestination={isPeopleSurface ? "people" : "online"}
         title={isPeopleSurface ? "People" : "Online"}
-        kicker={isPeopleSurface ? "Players, Challenges" : "Lobby, Watch, Archive"}
+        kicker={isPeopleSurface ? "Players" : "Lobby, Watch, Archive"}
         description={
           isPeopleSurface
-            ? "Find players, manage challenges, and keep followed-player shortcuts separate from the game lists."
+            ? "Find players and scan beta rating leaders without mixing account settings into the game lists."
             : "Create or accept lobby listings, watch live public games, and replay completed public games."
         }
         backLabel={backLabel}
@@ -3932,7 +3934,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         onSignOutAccount={onSignOutAccount}
       />
 
-      {account && (onOpenProfile || canUseAccountSocial) && (
+      {showAccountProfileHandoff && (
         <section className="online-browser-account-panel online-browser-account-handoff" aria-label="Online account">
           <div className="online-browser-account-copy">
             <span className="online-browser-section-kicker">Account</span>
@@ -3958,20 +3960,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       )}
 
       {showOnlinePeopleHandoff && (
-        <section className="online-browser-account-panel online-browser-people-handoff" aria-label="People and challenges">
+        <section className="online-browser-account-panel online-browser-people-handoff" aria-label="People">
           <div className="online-browser-account-copy">
             <span className="online-browser-section-kicker">People</span>
-            <strong>Players and challenges</strong>
-            <p>Player search, following, rating leaders, and account challenges now live on the People page.</p>
-            {hasChallengeNotice && (
-              <div className="online-browser-social-badges">
-                {pendingIncomingChallengeCount > 0 && <span>{formatCount(pendingIncomingChallengeCount, "incoming challenge")}</span>}
-                {pendingOutgoingChallengeCount > 0 && <span>{formatCount(pendingOutgoingChallengeCount, "sent challenge")}</span>}
-                {accountChallengeUnreadActivity.acceptedReady > 0 && (
-                  <span>{formatCount(accountChallengeUnreadActivity.acceptedReady, "game ready")}</span>
-                )}
-              </div>
-            )}
+            <strong>Player search and leaders</strong>
+            <p>Search accounts and scan beta rating leaders on the People page.</p>
           </div>
           <div className="online-browser-account-actions">
             <button
@@ -3991,7 +3984,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <div>
               <span className="online-browser-section-kicker">People</span>
               <h2>People</h2>
-              <p>Player search, following, and targeted challenges need a Castles account.</p>
+              <p>Player search needs a Castles account.</p>
             </div>
             <button
               type="button"
@@ -4010,16 +4003,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <div>
               <span className="online-browser-section-kicker">People</span>
               <h2>People</h2>
-              <p>Search account names, follow players you trust, and block accounts you do not want to interact with.</p>
+              <p>Search account names and scan beta rating leaders.</p>
             </div>
-            <button
-              type="button"
-              className="online-browser-button subtle"
-              onClick={() => void refreshFollowingProfiles()}
-              disabled={followingStatus === "loading" || socialAction === "refresh"}
-            >
-              {followingStatus === "loading" || socialAction === "refresh" ? "Refreshing" : "Refresh Following"}
-            </button>
+            {showProfileOwnedPeopleBlocks && (
+              <button
+                type="button"
+                className="online-browser-button subtle"
+                onClick={() => void refreshFollowingProfiles()}
+                disabled={followingStatus === "loading" || socialAction === "refresh"}
+              >
+                {followingStatus === "loading" || socialAction === "refresh" ? "Refreshing" : "Refresh Following"}
+              </button>
+            )}
           </div>
 
           <div className="online-browser-social-grid">
@@ -4128,7 +4123,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </form>
           )}
 
-          {canUseAccountChallenges && hasChallengeNotice && (
+          {showProfileOwnedPeopleBlocks && canUseAccountChallenges && hasChallengeNotice && (
             <section
               className="online-browser-challenge-notice"
               aria-label={hasPendingChallengeNotice ? "Pending challenge notice" : "Challenge activity notice"}
@@ -4244,7 +4239,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </section>
           )}
 
-          {followingStatus === "ready" && onlineNowRailProfiles.length > 0 && (
+          {showProfileOwnedPeopleBlocks && followingStatus === "ready" && onlineNowRailProfiles.length > 0 && (
             <section className="online-browser-online-now" aria-label="Online followed players now">
               <div className="online-browser-online-now-heading">
                 <div className="online-browser-following-list-title">
@@ -4382,7 +4377,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </section>
           )}
 
-          {canUseAccountChallenges && (
+          {showProfileOwnedPeopleBlocks && canUseAccountChallenges && (
             <section
               ref={accountChallengesSectionRef}
               className="online-browser-following-list online-browser-account-challenges"
@@ -4754,6 +4749,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </article>
           )}
 
+          {showProfileOwnedPeopleBlocks && (
           <section className="online-browser-following-list" aria-label="Followed players">
             <div className="online-browser-following-list-heading">
               <div className="online-browser-following-list-title">
@@ -5059,6 +5055,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </div>
             )}
           </section>
+          )}
         </section>
       )}
 

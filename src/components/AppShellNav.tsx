@@ -1,5 +1,4 @@
 import React from "react";
-import "../css/AppShellNav.css";
 import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import peopleIcon from "../Assets/Images/misc/bcastle.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
@@ -7,6 +6,7 @@ import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import crownIcon from "../Assets/Images/misc/crown.svg";
+import "../css/AppShellNav.css";
 
 export type AppDestinationId = "play" | "learn" | "library" | "online" | "people" | "profile" | "tools";
 
@@ -72,10 +72,6 @@ const AppShellNav: React.FC<AppShellNavProps> = ({
     <header className="app-shell-header">
       <nav className="app-shell-nav" aria-label={ariaLabel}>
         <div className="app-shell-nav-primary">
-          <div className="app-shell-brand" aria-label="Castles">
-            <span className="app-shell-brand-mark" aria-hidden="true">C</span>
-            <span className="app-shell-brand-name">Castles</span>
-          </div>
           {onBack && backLabel && (
             <button
               type="button"

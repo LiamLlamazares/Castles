@@ -616,9 +616,9 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const handoff = await screen.findByRole("region", { name: "People and challenges" });
-    expect(handoff).toHaveTextContent("Player search, following, rating leaders, and account challenges now live on the People page.");
-    expect(screen.queryByRole("region", { name: "People" })).not.toBeInTheDocument();
+    const handoff = await screen.findByRole("region", { name: "People" });
+    expect(handoff).toHaveTextContent("Search accounts and scan beta rating leaders on the People page.");
+    expect(screen.queryByRole("textbox", { name: "Search account name" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lobby games" })).toBeInTheDocument();
 
     fireEvent.click(within(handoff).getByRole("button", { name: "Open People" }));
@@ -653,7 +653,9 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     expect(within(people).getByRole("textbox", { name: "Search account name" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "People and challenges" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Search accounts and scan beta rating leaders on the People page.")).not.toBeInTheDocument();
+    expect(within(people).queryByRole("region", { name: "Account challenges" })).not.toBeInTheDocument();
+    expect(within(people).queryByRole("region", { name: "Followed players" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lobby games" })).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "People navigation" })).toBeInTheDocument();
     expect(peopleLoadGames).not.toHaveBeenCalled();
@@ -2770,17 +2772,9 @@ describe("OnlineGameBrowser", () => {
     expect(within(challenges).getByText("No account challenges yet.")).toBeInTheDocument();
   });
 
-  it("synchronizes the count-only People navigation badge after declining an inbox challenge", async () => {
+  it("keeps count-only People navigation badges while hiding Profile-owned challenge controls", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
-    const declinedSummary = {
-      ...pendingSummary,
-      updatedAt: "2026-06-03T12:02:00.000Z",
-      status: "declined" as const,
-      declinedAt: "2026-06-03T12:02:00.000Z",
-      declinedBy: account.identity,
-      lastEventId: "challenge_samir_liam_declined_evt",
-    };
     const loadAccountChallenges = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       ...accountChallengeDirectory([{ role: "challenged", summary: pendingSummary }]),
@@ -2790,12 +2784,8 @@ describe("OnlineGameBrowser", () => {
     const onBack = vi.fn();
     const onSpectate = vi.fn();
     const onReplay = vi.fn();
-    const onDeclineAccountChallenge = vi.fn().mockResolvedValue({
-      role: "challenged",
-      summary: declinedSummary,
-    });
+    const onDeclineAccountChallenge = vi.fn();
     const BrowserWithParentNotificationState = () => {
-      const [onlineNotificationCount, setOnlineNotificationCount] = React.useState(1);
       return (
         <OnlineGameBrowser
           surface="people"
@@ -2811,9 +2801,9 @@ describe("OnlineGameBrowser", () => {
           {...socialPropsWithFollowing()}
           loadAccountChallenges={loadAccountChallenges}
           onDeclineAccountChallenge={onDeclineAccountChallenge}
-          onlineNotificationCount={onlineNotificationCount}
+          onlineNotificationCount={1}
           onlineNotificationLabel="challenge activities"
-          onAccountChallengeNavigationActivityChange={setOnlineNotificationCount}
+          onAccountChallengeNavigationActivityChange={vi.fn()}
         />
       );
     };
@@ -2825,19 +2815,10 @@ describe("OnlineGameBrowser", () => {
       "page"
     );
     const people = await screen.findByRole("region", { name: "People" });
-    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
-    const row = await within(challenges).findByText("Samir");
-    const article = row.closest("article");
-    expect(article).not.toBeNull();
-
-    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Decline challenge from Samir" }));
-
-    await waitFor(() => expect(onDeclineAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
-    expect(await within(challenges).findByText("No account challenges yet.")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "People" })).toHaveAttribute("aria-current", "page")
-    );
-    expect(screen.queryByRole("button", { name: "People, 1 challenge activity" })).not.toBeInTheDocument();
+    expect(within(people).getByRole("textbox", { name: "Search account name" })).toBeInTheDocument();
+    expect(within(people).queryByRole("region", { name: "Account challenges" })).not.toBeInTheDocument();
+    expect(within(people).queryByText("Samir")).not.toBeInTheDocument();
+    expect(onDeclineAccountChallenge).not.toHaveBeenCalled();
   });
 
   it("offers block and report actions from registered account challenge rows", async () => {

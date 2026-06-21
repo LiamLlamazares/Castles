@@ -30,34 +30,6 @@
   min-width: 0;
 }
 
-.app-shell-brand {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  color: #d4d4d4;
-  font-weight: 850;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.app-shell-brand-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(191, 129, 29, 0.58);
-  background: rgba(191, 129, 29, 0.16);
-  color: #bf811d;
-  font-size: 0.88rem;
-}
-
-.app-shell-brand-name {
-  font-size: 1.02rem;
-}
-
 .app-shell-destinations {
   display: flex;
   flex: 1 1 auto;
@@ -189,10 +161,6 @@
   line-height: 1.4;
 }
 
-[data-theme="light"] .app-shell-brand {
-  color: #1f1f1f;
-}
-
 [data-theme="light"] .app-shell-back-button,
 [data-theme="light"] .app-shell-destination {
   border-color: #d9d9d9;
@@ -305,15 +273,6 @@
     display: none;
   }
 
-  .app-shell-brand-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
   .app-shell-destinations {
     flex: 1 0 100%;
     width: 100%;
@@ -345,16 +304,6 @@
     padding: 0 4px;
     font-size: 0.58rem;
   }
-}
-
-.setup-sidebar .app-shell-brand-name,
-.tutorial-sidebar .app-shell-brand-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 .setup-sidebar .app-shell-destination,
