@@ -44,6 +44,7 @@ import {
   readPreferredPieceTheme,
   writePreferredPieceTheme,
 } from "../preferences/displayPreferences";
+import { readCachedProfileAvatar, rememberCachedProfileAvatar } from "../online/profileAvatarCache";
 import "../css/OnlineProfileDashboard.css";
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -482,6 +483,9 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const themeMode = themeContext?.themeMode ?? "dark";
   const setThemeMode = themeContext?.setThemeMode ?? (() => {});
   const [profile, setProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
+  const [cachedAvatar, setCachedAvatar] = React.useState<OnlineAccountAvatar | null>(() =>
+    readCachedProfileAvatar(displayName)
+  );
   const [avatarDraft, setAvatarDraft] = React.useState<OnlineAccountAvatar | null>(null);
   const [pieceThemePreference, setPieceThemePreference] = React.useState<PieceTheme>(() => readPreferredPieceTheme());
   const [profileStatus, setProfileStatus] = React.useState<LoadStatus>("loading");
@@ -531,6 +535,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   React.useEffect(() => {
     const requestId = ++profileRequestRef.current;
     setProfile(null);
+    setCachedAvatar(readCachedProfileAvatar(displayName));
     setAvatarDraft(null);
     setProfileStatus("loading");
     setProfileActionStatus("idle");
@@ -539,6 +544,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       .then((response) => {
         if (requestId !== profileRequestRef.current) return;
         setProfile(response.profile);
+        setCachedAvatar(response.profile.avatar);
+        rememberCachedProfileAvatar(response.profile.displayName, response.profile.avatar);
         setAvatarDraft(response.profile.avatar);
         setProfileStatus("ready");
       })
@@ -802,7 +809,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     newPassword.length <= ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH &&
     passwordStatus !== "loading";
   const canSubmitAvatar = !!updateAccountProfile && !!avatarDraft && avatarStatus !== "loading";
-  const displayAvatar = profile?.avatar ?? avatarDraft ?? DEFAULT_PROFILE_AVATAR;
+  const displayAvatar = profile?.avatar ?? (profileStatus === "loading" ? cachedAvatar : null) ?? DEFAULT_PROFILE_AVATAR;
 
   const handleSectionChange = (section: ProfileSectionId) => {
     setActiveSection(section);
@@ -854,6 +861,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     try {
       const response = await updateAccountProfile({ avatar: avatarDraft });
       setProfile(response.profile);
+      setCachedAvatar(response.profile.avatar);
+      rememberCachedProfileAvatar(response.profile.displayName, response.profile.avatar);
       setAvatarDraft(response.profile.avatar);
       setSettingsMessage("Avatar saved.");
       setSettingsMessageTone("status");

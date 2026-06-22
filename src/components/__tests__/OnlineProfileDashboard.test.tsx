@@ -299,6 +299,69 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.queryByRole("radio", { name: "Monarch avatar" })).not.toBeInTheDocument();
   });
 
+  it("uses a cached uploaded profile picture while the latest profile is loading", async () => {
+    window.localStorage.setItem("castles-profile-avatar-cache-v1", JSON.stringify({
+      liam: {
+        displayName: "Liam",
+        avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+        cachedAt: Date.now(),
+      },
+    }));
+    let resolveProfile: ((value: {
+      protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
+      profile: OnlineAccountPublicProfile;
+    }) => void) | undefined;
+    const profilePromise = new Promise<{
+      protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
+      profile: OnlineAccountPublicProfile;
+    }>((resolve) => {
+      resolveProfile = resolve;
+    });
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockReturnValue(profilePromise)}
+      />
+    );
+
+    const cachedAvatar = screen.getByRole("img", { name: "Liam uploaded profile picture" });
+    expect(cachedAvatar.querySelector("img")).toHaveAttribute("src", TINY_AVATAR_DATA_URL);
+
+    resolveProfile?.({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: profile("Liam", {
+        avatar: { schemaVersion: 1, preset: "knight", color: "blue" },
+        relationship: { self: true, following: false, followedBy: false, blocked: false },
+      }),
+    });
+    expect(await screen.findByRole("img", { name: "Liam profile avatar, knight on blue" })).toBeInTheDocument();
+  });
+
+  it("does not keep a cached profile picture after the latest profile load fails", async () => {
+    window.localStorage.setItem("castles-profile-avatar-cache-v1", JSON.stringify({
+      liam: {
+        displayName: "Liam",
+        avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+        cachedAt: Date.now(),
+      },
+    }));
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockRejectedValue(new Error("offline"))}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "Liam uploaded profile picture" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Profile unavailable.");
+    expect(screen.queryByRole("img", { name: "Liam uploaded profile picture" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Liam profile avatar, monarch on green" })).toBeInTheDocument();
+  });
+
   it("exposes theme mode and piece-set preferences in Profile Settings", async () => {
     render(
       <ThemeProvider>

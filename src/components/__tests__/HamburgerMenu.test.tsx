@@ -49,6 +49,36 @@ const menuProps = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu>
 });
 
 describe("HamburgerMenu", () => {
+  it("renders compact top-left navigation and board shortcut bars", () => {
+    const { props } = renderMenu({
+      onEnableAnalysis: vi.fn(),
+      onEditPosition: vi.fn(),
+      onlineNotificationCount: 3,
+      onlineNotificationLabel: "challenge activities",
+    });
+
+    expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Navigation shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Board shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open people, 3 challenge activities" }).querySelector(".game-corner-badge")).toHaveTextContent("3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Play setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open profile" }));
+    fireEvent.click(screen.getByRole("button", { name: "Flip board view" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle board coordinates" }));
+
+    expect(props.onNewGame).toHaveBeenCalledOnce();
+    expect(props.onOpenProfile).toHaveBeenCalledOnce();
+    expect(props.onFlipBoard).toHaveBeenCalledOnce();
+    expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
+  });
+
+  it("marks the compact coordinate shortcut as pressed when coordinates are visible", () => {
+    renderMenu({ showCoordinates: true });
+
+    expect(screen.getByRole("button", { name: "Toggle board coordinates" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("promotes primary navigation actions and closes after a navigation action", () => {
     const { container, props } = renderMenu();
 

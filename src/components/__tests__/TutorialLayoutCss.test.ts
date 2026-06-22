@@ -94,7 +94,7 @@ describe("Tutorial mobile layout CSS", () => {
 
     expect(hintRule).toContain("top: 16px;");
     expect(hintRule).toContain("bottom: auto;");
-    expect(hintRule).toContain("left: 76px;");
+    expect(hintRule).toContain("left: calc(var(--game-corner-chrome-left, 16px) + var(--game-corner-chrome-width, 104px) + 12px);");
     expect(hintRule).toContain("right: auto;");
     expect(hintRule).toContain("max-width: 320px;");
   });

@@ -104,6 +104,10 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     normalizedOnlineNotificationCount > 0
       ? `People, ${normalizedOnlineNotificationCount} ${onlineNotificationLabel}`
       : "People";
+  const peopleShortcutLabel =
+    normalizedOnlineNotificationCount > 0
+      ? `Open people, ${normalizedOnlineNotificationCount} ${onlineNotificationLabel}`
+      : "Open people";
   const peopleBadge =
     normalizedOnlineNotificationCount > 99 ? "99+" : String(normalizedOnlineNotificationCount);
 
@@ -306,18 +310,84 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     </span>
   );
 
+  const renderCornerIcon = (src: string) => (
+    <img className="game-corner-icon" src={src} alt="" aria-hidden="true" />
+  );
+
+  const cornerButton = (
+    label: string,
+    action: (() => void) | undefined,
+    icon: React.ReactNode,
+    options: { active?: boolean; badge?: string; className?: string; mobileOptional?: boolean } = {}
+  ) => {
+    if (!action) return null;
+    return (
+      <button
+        type="button"
+        className={[
+          "game-corner-button",
+          options.active ? "active" : "",
+          options.mobileOptional ? "mobile-optional" : "",
+          options.className ?? "",
+        ].filter(Boolean).join(" ")}
+        onClick={action}
+        aria-label={label}
+        title={label}
+        aria-pressed={options.active === undefined ? undefined : options.active}
+      >
+        {icon}
+        {options.badge && <span className="game-corner-badge" aria-hidden="true">{options.badge}</span>}
+      </button>
+    );
+  };
+
   return (
     <div className={`hamburger-container ${isOpen ? "open" : ""}`} ref={menuRef}>
-      {/* Hamburger Icon */}
-      <button
-        className="hamburger-button"
-        ref={menuButtonRef}
-        onClick={() => setMenuOpen(!isOpen)}
-        aria-label="Menu"
-        aria-expanded={isOpen}
-      >
-        <span className="hamburger-icon">☰</span>
-      </button>
+      <div className="game-corner-bars" aria-label="Game shortcuts">
+        <div className="game-corner-bar" role="toolbar" aria-label="Navigation shortcuts">
+          <button
+            className={`hamburger-button game-corner-button ${isOpen ? "active" : ""}`}
+            ref={menuButtonRef}
+            onClick={() => setMenuOpen(!isOpen)}
+            aria-label="Menu"
+            aria-expanded={isOpen}
+            title="Menu"
+          >
+            <span className="hamburger-icon">☰</span>
+          </button>
+          {!isOpen && (
+            <>
+              {cornerButton("Play setup", onNewGame, renderCornerIcon(flagIcon))}
+              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(lightbulbIcon))}
+              {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(castleIcon))}
+              {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(crownIcon), {
+                badge: normalizedOnlineNotificationCount > 0 ? peopleBadge : undefined,
+              })}
+              {cornerButton("Open profile", onOpenProfile, renderCornerIcon(crownIcon))}
+              {cornerButton("Open library", onOpenLibrary, renderCornerIcon(scrollsIcon))}
+            </>
+          )}
+        </div>
+
+        {!isOpen && (
+          <div className="game-corner-bar" role="toolbar" aria-label="Board shortcuts">
+            {cornerButton("Flip board view", onFlipBoard, renderCornerIcon(rotateIcon))}
+            {cornerButton("Toggle board coordinates", onToggleCoordinates, renderCornerIcon(hexTilesIcon), {
+              active: showCoordinates,
+              mobileOptional: true,
+            })}
+            {cornerButton("Show rules", onShowRules, renderCornerIcon(scrollIcon), { mobileOptional: true })}
+            {onReturnFromAnalysis && cornerButton(analysisReturnLabel, onReturnFromAnalysis, renderCornerIcon(rotateIcon), {
+              className: "primary",
+              mobileOptional: true,
+            })}
+            {onEnableAnalysis && !isAnalysisMode && cornerButton("Open analysis board", onEnableAnalysis, renderCornerIcon(swordsIcon), {
+              mobileOptional: true,
+            })}
+            {cornerButton("Edit position", onEditPosition, renderCornerIcon(shieldIcon), { mobileOptional: true })}
+          </div>
+        )}
+      </div>
 
       {/* Slide-out Menu */}
       {isOpen && (

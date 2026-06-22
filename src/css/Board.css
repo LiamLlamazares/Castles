@@ -374,6 +374,10 @@ body {
 /* =========== GAME SHELL (Lichess-style board + side panel) =========== */
 
 .game-shell {
+  --game-corner-chrome-left: 16px;
+  --game-corner-chrome-top: 16px;
+  --game-corner-chrome-width: 372px;
+  --game-corner-chrome-height: 104px;
   height: 100dvh;
   width: 100vw;
   display: grid;
@@ -789,7 +793,7 @@ body {
 .online-session-badge {
   position: absolute;
   top: 14px;
-  left: 72px;
+  left: calc(var(--game-corner-chrome-left, 16px) + var(--game-corner-chrome-width, 104px) + 12px);
   right: 340px;
   transform: none;
   z-index: 20;
@@ -1300,8 +1304,8 @@ body {
 
 .hamburger-container {
   position: fixed;
-  top: 16px;
-  left: 16px;
+  top: var(--game-corner-chrome-top, 16px);
+  left: var(--game-corner-chrome-left, 16px);
   z-index: 300;
 }
 
@@ -1312,22 +1316,113 @@ body {
 .hamburger-button {
   width: 48px;
   height: 48px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(40, 40, 40, 0.9);
-  color: #fff;
-  font-size: 1.5rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
-.hamburger-button:hover {
-  background: rgba(60, 60, 60, 0.95);
-  transform: scale(1.05);
+.game-corner-bars {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+}
+
+.game-corner-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.game-corner-button {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(32, 34, 31, 0.9);
+  color: #f3efe2;
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.game-corner-button:hover,
+.game-corner-button:focus-visible {
+  background: rgba(52, 55, 50, 0.94);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.game-corner-button.active,
+.game-corner-button.primary {
+  background: #629924;
+  border-color: #77ad32;
+  color: #10180b;
+}
+
+.game-corner-icon {
+  width: 26px;
+  height: 26px;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  filter: brightness(0) saturate(100%) invert(93%) sepia(12%) saturate(320%) hue-rotate(10deg) brightness(103%) contrast(93%);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.game-corner-button.active .game-corner-icon,
+.game-corner-button.primary .game-corner-icon {
+  filter: brightness(0) saturate(100%) invert(9%) sepia(9%) saturate(1412%) hue-rotate(42deg) brightness(94%) contrast(94%);
+}
+
+.game-corner-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #bf811d;
+  color: #1b160d;
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .game-corner-button {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(34, 34, 34, 0.18);
+  color: #242424;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+}
+
+[data-theme="light"] .game-corner-button:hover,
+[data-theme="light"] .game-corner-button:focus-visible {
+  background: #f6f6f1;
+  border-color: rgba(34, 34, 34, 0.28);
+}
+
+[data-theme="light"] .game-corner-button.active,
+[data-theme="light"] .game-corner-button.primary {
+  background: #629924;
+  border-color: #5f8f27;
+  color: #10180b;
+}
+
+[data-theme="light"] .game-corner-icon {
+  filter: brightness(0) saturate(100%) invert(13%) sepia(8%) saturate(1012%) hue-rotate(91deg) brightness(88%) contrast(92%);
 }
 
 .hamburger-icon {
@@ -1651,7 +1746,7 @@ body {
   position: fixed;
   top: 16px;
   bottom: auto;
-  left: 76px;
+  left: calc(var(--game-corner-chrome-left, 16px) + var(--game-corner-chrome-width, 104px) + 12px);
   right: auto;
   width: calc(100vw - 432px);
   max-width: 320px;
@@ -2717,14 +2812,45 @@ body {
     padding: 6px 10px;
   }
 
-  .hamburger-container {
-    top: 12px;
-    left: 12px;
+  .game-shell {
+    --game-corner-chrome-left: 12px;
+    --game-corner-chrome-top: 12px;
+    --game-corner-chrome-width: 44px;
+    --game-corner-chrome-height: 44px;
   }
 
-  .hamburger-button {
+  .hamburger-container {
+    top: var(--game-corner-chrome-top, 12px);
+    left: var(--game-corner-chrome-left, 12px);
+  }
+
+  .game-corner-bars {
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .game-corner-bar {
+    gap: 5px;
+  }
+
+  .game-corner-bar[aria-label="Board shortcuts"] {
+    display: none;
+  }
+
+  .hamburger-button,
+  .game-corner-button {
     width: 44px;
     height: 44px;
+  }
+
+  .game-corner-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .game-corner-button:not(.hamburger-button),
+  .game-corner-button.mobile-optional {
+    display: none;
   }
 
   .hamburger-menu {
@@ -2765,8 +2891,8 @@ body {
   }
 
   .online-session-badge {
-    top: 12px;
-    left: 64px;
+    top: calc(var(--game-corner-chrome-top, 12px) + var(--game-corner-chrome-height, 44px) + 8px);
+    left: 12px;
     right: 12px;
     max-width: none;
     font-size: 0.76rem;
