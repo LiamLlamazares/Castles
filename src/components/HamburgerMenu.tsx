@@ -4,28 +4,7 @@
  */
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "../contexts/ThemeContext";
-
-import scrollIcon from "../Assets/Images/misc/scroll.svg";
-import rotateIcon from "../Assets/Images/Board/rotate.svg";
-import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
-import flagIcon from "../Assets/Images/misc/flag.svg";
-import castleIcon from "../Assets/Images/misc/wcastle.svg";
-import crownIcon from "../Assets/Images/misc/crown.svg";
-import footprintIcon from "../Assets/Images/misc/footprint.svg";
-import glitterIcon from "../Assets/Images/misc/glitter.svg";
-import hexTilesIcon from "../Assets/Images/misc/hex-tiles.svg";
-import pawnIcon from "../Assets/Images/misc/pawn.svg";
-import shieldIcon from "../Assets/Images/Board/shield.svg";
-import starIcon from "../Assets/Images/misc/star.svg";
-import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
-import wizardIcon from "../Assets/Images/misc/wizard.svg";
-
-const shouldUseDrawerMenu = () => {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return true;
-  }
-  return window.matchMedia("(max-width: 760px)").matches;
-};
+import { APP_ICON_ASSETS } from "./appIconRegistry";
 
 interface HamburgerMenuProps {
   onExportPGN: () => void;
@@ -47,7 +26,6 @@ interface HamburgerMenuProps {
   onEditPosition?: () => void;
   onTutorial?: () => void;
   onOpenChange?: (isOpen: boolean) => void;
-  onShortcutsVisibilityChange?: (areVisible: boolean) => void;
   isAnalysisMode?: boolean;
   onToggleTerrainIcons?: () => void;
   onToggleSanctuaryIcons?: () => void;
@@ -81,7 +59,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onEditPosition,
   onTutorial,
   onOpenChange,
-  onShortcutsVisibilityChange,
   isAnalysisMode = false,
   onToggleShields,
   onToggleCastleRecruitment,
@@ -95,8 +72,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   showCoordinates = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [areShortcutsVisible, setAreShortcutsVisible] = useState(true);
-  const [usesDrawerMenu, setUsesDrawerMenu] = useState(shouldUseDrawerMenu);
   const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -157,29 +132,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     }
     menuButtonModalStateRef.current = null;
   }, []);
-
-  const setShortcutsVisible = React.useCallback((nextVisible: boolean) => {
-    setAreShortcutsVisible(nextVisible);
-    onShortcutsVisibilityChange?.(nextVisible);
-  }, [onShortcutsVisibilityChange]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(max-width: 760px)");
-    const syncMenuMode = () => {
-      setUsesDrawerMenu(query.matches);
-      if (query.matches) {
-        setShortcutsVisible(true);
-      }
-    };
-    syncMenuMode();
-    if (typeof query.addEventListener === "function") {
-      query.addEventListener("change", syncMenuMode);
-      return () => query.removeEventListener("change", syncMenuMode);
-    }
-    query.addListener?.(syncMenuMode);
-    return () => query.removeListener?.(syncMenuMode);
-  }, [setShortcutsVisible]);
 
   const setMenuOpen = React.useCallback((nextOpen: boolean) => {
     if (nextOpen) {
@@ -344,19 +296,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   };
 
   const handleMenuButtonClick = () => {
-    if (usesDrawerMenu) {
-      setMenuOpen(!isOpen);
-      return;
-    }
-    if (isOpen) {
-      setMenuOpen(false);
-      return;
-    }
-    setShortcutsVisible(!areShortcutsVisible);
-  };
-
-  const handleMoreOptionsClick = () => {
-    setMenuOpen(true);
+    setMenuOpen(!isOpen);
   };
 
   const renderImageIcon = (src: string) => (
@@ -401,68 +341,34 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
       className={[
         "hamburger-container",
         isOpen ? "open" : "",
-        areShortcutsVisible ? "shortcuts-visible" : "shortcuts-collapsed",
       ].filter(Boolean).join(" ")}
       ref={menuRef}
     >
       <div className="game-corner-bars" aria-label="Game shortcuts">
-        <div className="game-corner-bar" role="toolbar" aria-label="Navigation shortcuts">
+        <div className="game-corner-bar game-corner-nav-column" role="toolbar" aria-label="Navigation shortcuts">
           <button
             className={`hamburger-button game-corner-button ${isOpen ? "active" : ""}`}
             ref={menuButtonRef}
             onClick={handleMenuButtonClick}
-            aria-label={
-              usesDrawerMenu
-                ? "Menu"
-                : areShortcutsVisible
-                  ? "Hide shortcuts"
-                  : "Show shortcuts"
-            }
-            aria-expanded={usesDrawerMenu ? isOpen : areShortcutsVisible}
-            aria-pressed={usesDrawerMenu ? undefined : areShortcutsVisible}
-            title={
-              usesDrawerMenu
-                ? "Menu"
-                : areShortcutsVisible
-                  ? "Hide shortcuts"
-                  : "Show shortcuts"
-            }
+            aria-label="Menu"
+            aria-expanded={isOpen}
+            title="Menu"
           >
             <span className="hamburger-icon">☰</span>
           </button>
-          {!isOpen && areShortcutsVisible && (
+          {!isOpen && (
             <>
-              {cornerButton("Play setup", onNewGame, renderCornerIcon(flagIcon))}
-              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(wizardIcon))}
-              {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(castleIcon))}
-              {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(pawnIcon), {
+              {cornerButton("Play setup", onNewGame, renderCornerIcon(APP_ICON_ASSETS.play))}
+              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(APP_ICON_ASSETS.tutorial))}
+              {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(APP_ICON_ASSETS.online))}
+              {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(APP_ICON_ASSETS.people), {
                 badge: normalizedOnlineNotificationCount > 0 ? peopleBadge : undefined,
               })}
-              {cornerButton("Open profile", onOpenProfile, renderCornerIcon(crownIcon))}
-              {cornerButton("Open library", onOpenLibrary, renderCornerIcon(scrollsIcon))}
-              {cornerButton("More options", handleMoreOptionsClick, renderCornerIcon(glitterIcon))}
+              {cornerButton("Open profile", onOpenProfile, renderCornerIcon(APP_ICON_ASSETS.profile))}
+              {cornerButton("Open library", onOpenLibrary, renderCornerIcon(APP_ICON_ASSETS.library))}
             </>
           )}
         </div>
-
-        {!isOpen && areShortcutsVisible && (
-          <div className="game-corner-bar" role="toolbar" aria-label="Board shortcuts">
-            {cornerButton("Flip board view", onFlipBoard, renderCornerIcon(rotateIcon))}
-            {cornerButton("Toggle board coordinates", onToggleCoordinates, renderCornerIcon(hexTilesIcon), {
-              active: showCoordinates,
-              mobileOptional: true,
-            })}
-            {cornerButton("Show rules", onShowRules, renderCornerIcon(scrollIcon), { mobileOptional: true })}
-            {onReturnFromAnalysis && cornerButton(analysisReturnLabel, onReturnFromAnalysis, renderCornerIcon(footprintIcon), {
-              className: "primary",
-              mobileOptional: true,
-            })}
-            {onEnableAnalysis && !isAnalysisMode && cornerButton("Open analysis board", onEnableAnalysis, renderCornerIcon(swordsIcon), {
-              mobileOptional: true,
-            })}
-            {cornerButton("Edit position", onEditPosition, renderCornerIcon(shieldIcon), { mobileOptional: true })}
-          </div>
-        )}
       </div>
 
       {/* Slide-out Menu */}
@@ -495,7 +401,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item primary"
                   onClick={() => handleMenuItemClick(onReturnFromAnalysis)}
                 >
-                  {renderImageIcon(rotateIcon)}
+                  {renderImageIcon(APP_ICON_ASSETS.returnToGame)}
                   <span>{analysisReturnLabel}</span>
                 </button>
               )}
@@ -505,7 +411,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className={`menu-item ${onReturnFromAnalysis ? "" : "primary"}`}
                   onClick={() => handleMenuItemClick(onNewGame)}
                 >
-                  {renderImageIcon(flagIcon)}
+                  {renderImageIcon(APP_ICON_ASSETS.play)}
                   <span>Configure New Game</span>
                 </button>
               )}
@@ -520,7 +426,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
-                  {renderImageIcon(wizardIcon)}
+                  {renderImageIcon(APP_ICON_ASSETS.tutorial)}
                   <span>Tutorial</span>
                 </button>
               )}
@@ -529,7 +435,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onShowRules)}
               >
-                {renderImageIcon(scrollIcon)}
+                {renderImageIcon(APP_ICON_ASSETS.rules)}
                 <span>Rules</span>
               </button>
             </section>
@@ -545,7 +451,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     aria-label={onlineLobbyLabel}
                     title={onlineLobbyLabel}
                   >
-                    {renderImageIcon(castleIcon)}
+                    {renderImageIcon(APP_ICON_ASSETS.online)}
                     <span>Online Lobby</span>
                   </button>
                 )}
@@ -556,7 +462,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     aria-label={peopleLabel}
                     title={peopleLabel}
                   >
-                    {renderImageIcon(pawnIcon)}
+                    {renderImageIcon(APP_ICON_ASSETS.people)}
                     <span>People</span>
                     {normalizedOnlineNotificationCount > 0 && (
                       <span className="menu-item-badge" aria-hidden="true">
@@ -576,7 +482,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenProfile)}
                 >
-                  {renderImageIcon(crownIcon)}
+                  {renderImageIcon(APP_ICON_ASSETS.profile)}
                   <span>Profile</span>
                 </button>
               </section>
@@ -592,7 +498,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     className="menu-item"
                     onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
                   >
-                    {renderImageIcon(scrollIcon)}
+                    {renderImageIcon(APP_ICON_ASSETS.export)}
                     <span>Save to Library</span>
                   </button>
                 )}
@@ -602,7 +508,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     className="menu-item primary"
                     onClick={() => handleMenuItemClick(onOpenLibrary)}
                   >
-                    {renderImageIcon(scrollsIcon)}
+                    {renderImageIcon(APP_ICON_ASSETS.library)}
                     <span>Open Library</span>
                   </button>
                 )}
@@ -618,15 +524,15 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => toggleTheme()}
               >
-                {renderImageIcon(starIcon)}
-                <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+                {renderImageIcon(isDark ? APP_ICON_ASSETS.day : APP_ICON_ASSETS.night)}
+                <span>{isDark ? 'Day Mode' : 'Night Mode'}</span>
               </button>
 
               <button
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onExportPGN)}
               >
-                {renderImageIcon(scrollIcon)}
+                {renderImageIcon(APP_ICON_ASSETS.export)}
                 <span>Export PGN</span>
               </button>
 
@@ -634,7 +540,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onImportPGN)}
               >
-                {renderImageIcon(scrollsIcon)}
+                {renderImageIcon(APP_ICON_ASSETS.import)}
                 <span>Import PGN</span>
               </button>
 
@@ -642,7 +548,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onFlipBoard)}
               >
-                {renderImageIcon(rotateIcon)}
+                {renderImageIcon(APP_ICON_ASSETS.rotate)}
                 <span>Flip Board</span>
               </button>
 
@@ -651,7 +557,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
                 aria-expanded={isIconsMenuOpen}
               >
-                <span className="menu-item-label">{renderImageIcon(hexTilesIcon)}<span>Board Display</span></span>
+                <span className="menu-item-label">{renderImageIcon(APP_ICON_ASSETS.boardDisplay)}<span>Board Display</span></span>
                 <span className="menu-item-disclosure" aria-hidden="true">{isIconsMenuOpen ? "-" : "+"}</span>
               </button>
 
@@ -743,7 +649,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                       className="menu-item"
                       onClick={() => handleMenuItemClick(onEnableAnalysis)}
                     >
-                      {renderImageIcon(swordsIcon)}
+                      {renderImageIcon(APP_ICON_ASSETS.analysis)}
                       <span>Analysis Board</span>
                     </button>
                   )}
@@ -753,7 +659,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                       className="menu-item"
                       onClick={() => handleMenuItemClick(onEditPosition)}
                     >
-                      {renderImageIcon(shieldIcon)}
+                      {renderImageIcon(APP_ICON_ASSETS.editPosition)}
                       <span>Edit Position</span>
                     </button>
                   )}

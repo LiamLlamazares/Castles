@@ -11,6 +11,11 @@ import { OnlineAccountDialog } from './components/OnlineAccountControls';
 import InstallAppHint from './components/InstallAppHint';
 import RulesManualPage from './components/RulesManualPage';
 import AppShellNav, { AppShellDestination } from './components/AppShellNav';
+import {
+  readTutorialProgressSummary,
+  TUTORIAL_PROGRESS_STORAGE_KEY,
+  TUTORIAL_PROGRESS_UPDATED_EVENT,
+} from './tutorial/progress';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
@@ -527,6 +532,9 @@ function App() {
   const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
   const [onlineChallengeNavigationActivityCount, setOnlineChallengeNavigationActivityCount] = useState(0);
   const [isOnlineAccountDialogOpen, setOnlineAccountDialogOpen] = useState(false);
+  const [isTutorialCompleteForNavigation, setTutorialCompleteForNavigation] = useState(() =>
+    readTutorialProgressSummary().isComplete
+  );
   const [onlineRematchTarget, setOnlineRematchTarget] = useState<OnlineRematchTarget | null>(null);
   const [rejoiningAccountGameId, setRejoiningAccountGameId] = useState<string | null>(null);
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
@@ -1099,6 +1107,27 @@ function App() {
   const handleTutorialClick = () => {
     pushView('tutorial');
   };
+
+  useEffect(() => {
+    const syncTutorialNavigationState = () => {
+      setTutorialCompleteForNavigation(readTutorialProgressSummary().isComplete);
+    };
+    const handleTutorialStorageChange = (event: StorageEvent) => {
+      if (!event.key || event.key === TUTORIAL_PROGRESS_STORAGE_KEY) {
+        syncTutorialNavigationState();
+      }
+    };
+
+    syncTutorialNavigationState();
+    window.addEventListener(TUTORIAL_PROGRESS_UPDATED_EVENT, syncTutorialNavigationState);
+    window.addEventListener("storage", handleTutorialStorageChange);
+    return () => {
+      window.removeEventListener(TUTORIAL_PROGRESS_UPDATED_EVENT, syncTutorialNavigationState);
+      window.removeEventListener("storage", handleTutorialStorageChange);
+    };
+  }, []);
+
+  const tutorialNavigationHandler = isTutorialCompleteForNavigation ? undefined : handleTutorialClick;
 
   const handleOpenLibrary = () => {
     pushView('library');
@@ -2779,7 +2808,9 @@ function App() {
   const onlineNavigationNotificationLabel = "challenge activities";
   const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
     { id: "play", label: "Play" },
-    { id: "learn", label: "Tutorial", onClick: handleOnlineStateTutorial },
+    ...(!isTutorialCompleteForNavigation
+      ? [{ id: "learn" as const, label: "Tutorial", onClick: handleOnlineStateTutorial }]
+      : []),
     {
       id: "online",
       label: "Online",
@@ -2797,6 +2828,7 @@ function App() {
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
   ], [
     handleOnlineStateTutorial,
+    isTutorialCompleteForNavigation,
     handleOnlineStateLibrary,
     handleOnlineStateOnline,
     handleOpenPeople,
@@ -2866,7 +2898,7 @@ function App() {
           onCreateOpenSeek={handleCreateOpenSeek}
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
-          onTutorial={handleTutorialClick}
+          onTutorial={tutorialNavigationHandler}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
           onOpenPeople={handleOpenPeople}
@@ -3130,7 +3162,7 @@ function App() {
               rematchLabel={onlineRematchTarget ? `Rematch ${onlineRematchTarget.displayName}` : undefined}
               onLoadGame={handleLoadGame}
               onEditPosition={handleEditPosition}
-              onTutorial={handleTutorialClick}
+              onTutorial={tutorialNavigationHandler}
               onOpenLibrary={handleOpenLibrary}
               onOpenOnlineBrowser={handleOpenOnlineBrowser}
               onOpenPeople={handleOpenPeople}
@@ -3157,7 +3189,7 @@ function App() {
           onBack={returnToPreviousView}
           onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
-          onTutorial={handleTutorialClick}
+          onTutorial={tutorialNavigationHandler}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
           onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
@@ -3199,7 +3231,7 @@ function App() {
           initialTab={onlineBrowserTab}
           activeTab={onlineBrowserTab}
           onTabChange={setOnlineBrowserTab}
-          onTutorial={handleTutorialClick}
+          onTutorial={tutorialNavigationHandler}
           onOpenLibrary={handleOpenLibrary}
           onOpenProfile={handleOpenProfile}
           onOpenPeople={handleOpenPeople}
@@ -3262,7 +3294,7 @@ function App() {
           initialTab={onlineBrowserTab}
           activeTab={onlineBrowserTab}
           onTabChange={setOnlineBrowserTab}
-          onTutorial={handleTutorialClick}
+          onTutorial={tutorialNavigationHandler}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
           onOpenPeople={handleOpenPeople}
@@ -3345,7 +3377,7 @@ function App() {
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
           onOpenGame={handleOpenGame}
-          onTutorial={handleTutorialClick}
+          onTutorial={tutorialNavigationHandler}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
           onOpenPeople={handleOpenPeople}
           onOpenLibrary={handleOpenLibrary}

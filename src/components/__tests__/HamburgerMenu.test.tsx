@@ -38,7 +38,6 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
       onSaveGameToLibrary: vi.fn(),
       onTutorial: vi.fn(),
       onOpenChange: vi.fn(),
-      onShortcutsVisibilityChange: vi.fn(),
       ...overrides,
     };
 
@@ -65,7 +64,6 @@ const menuProps = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu>
   onSaveGameToLibrary: vi.fn(),
   onTutorial: vi.fn(),
   onOpenChange: vi.fn(),
-  onShortcutsVisibilityChange: vi.fn(),
   ...overrides,
 });
 
@@ -78,7 +76,7 @@ describe("HamburgerMenu", () => {
     });
   });
 
-  it("renders compact top-left navigation and board shortcut bars", () => {
+  it("renders a single compact top-left navigation column", () => {
     const { props } = renderMenu({
       onEnableAnalysis: vi.fn(),
       onEditPosition: vi.fn(),
@@ -88,43 +86,40 @@ describe("HamburgerMenu", () => {
 
     expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "Navigation shortcuts" })).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Board shortcuts" })).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Board shortcuts" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open people, 3 challenge activities" }).querySelector(".game-corner-badge")).toHaveTextContent("3");
 
     fireEvent.click(screen.getByRole("button", { name: "Play setup" }));
     fireEvent.click(screen.getByRole("button", { name: "Open profile" }));
-    fireEvent.click(screen.getByRole("button", { name: "Flip board view" }));
-    fireEvent.click(screen.getByRole("button", { name: "Toggle board coordinates" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open library" }));
 
     expect(props.onNewGame).toHaveBeenCalledOnce();
     expect(props.onOpenProfile).toHaveBeenCalledOnce();
-    expect(props.onFlipBoard).toHaveBeenCalledOnce();
-    expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
+    expect(props.onOpenLibrary).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Flip board view" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).not.toBeInTheDocument();
   });
 
-  it("uses the menu button as a desktop shortcut visibility toggle", () => {
+  it("uses shared distinct shortcut icons and opens the drawer from the menu button", () => {
     mockMenuMedia(false);
-    const { container, props } = renderMenu();
+    const { container } = renderMenu();
 
-    expect(screen.getByRole("button", { name: "Hide shortcuts" })).toHaveAttribute("aria-pressed", "true");
+    const menuButton = screen.getByRole("button", { name: "Menu" });
+    expect(menuButton).toHaveAttribute("aria-expanded", "false");
     const tutorialIconSrc = screen.getByRole("button", { name: "Open tutorial" }).querySelector("img")?.getAttribute("src");
     const peopleIconSrc = screen.getByRole("button", { name: "Open people" }).querySelector("img")?.getAttribute("src");
     const profileIconSrc = screen.getByRole("button", { name: "Open profile" }).querySelector("img")?.getAttribute("src");
     expect(new Set([tutorialIconSrc, peopleIconSrc, profileIconSrc]).size).toBe(3);
-    expect(screen.getByRole("button", { name: "More options" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide shortcuts" }));
+    fireEvent.click(menuButton);
 
-    expect(props.onShortcutsVisibilityChange).toHaveBeenLastCalledWith(false);
-    expect(container.querySelector(".hamburger-menu")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show shortcuts" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("dialog", { name: "Castles menu" })).toBeInTheDocument();
+    expect(container.querySelector(".hamburger-button")).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("button", { name: "Open tutorial" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Board shortcuts" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }));
 
-    expect(props.onShortcutsVisibilityChange).toHaveBeenLastCalledWith(true);
-    expect(screen.getByRole("button", { name: "Hide shortcuts" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelector(".hamburger-menu")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open online lobby" })).toBeInTheDocument();
   });
 
@@ -132,7 +127,7 @@ describe("HamburgerMenu", () => {
     mockMenuMedia(false);
     const { props } = renderMenu();
 
-    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
     expect(screen.getByRole("dialog", { name: "Castles menu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PGN" })).toBeInTheDocument();
@@ -143,7 +138,7 @@ describe("HamburgerMenu", () => {
 
     expect(props.onExportPGN).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog", { name: "Castles menu" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hide shortcuts" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveFocus();
   });
 
   it("keeps the mobile menu button on the drawer fallback path", () => {
@@ -159,10 +154,13 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Configure New Game" })).toBeInTheDocument();
   });
 
-  it("marks the compact coordinate shortcut as pressed when coordinates are visible", () => {
+  it("marks the drawer coordinate checkbox when coordinates are visible", () => {
     renderMenu({ showCoordinates: true });
 
-    expect(screen.getByRole("button", { name: "Toggle board coordinates" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Board Display" }));
+
+    expect(screen.getByRole("checkbox", { name: "Coordinates" })).toBeChecked();
   });
 
   it("promotes primary navigation actions and closes after a navigation action", () => {

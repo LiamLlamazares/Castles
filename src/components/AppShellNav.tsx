@@ -1,11 +1,5 @@
 import React from "react";
-import castleIcon from "../Assets/Images/misc/wcastle.svg";
-import peopleIcon from "../Assets/Images/misc/bcastle.svg";
-import flagIcon from "../Assets/Images/misc/flag.svg";
-import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
-import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
-import shieldIcon from "../Assets/Images/Board/shield.svg";
-import crownIcon from "../Assets/Images/misc/crown.svg";
+import { APP_DESTINATION_ICONS } from "./appIconRegistry";
 import "../css/AppShellNav.css";
 
 export type AppDestinationId = "play" | "learn" | "library" | "online" | "people" | "profile" | "tools";
@@ -31,15 +25,7 @@ interface AppShellNavProps {
   endSlot?: React.ReactNode;
 }
 
-const destinationIcons: Record<AppDestinationId, string> = {
-  play: flagIcon,
-  learn: lightbulbIcon,
-  online: castleIcon,
-  people: peopleIcon,
-  library: scrollsIcon,
-  profile: crownIcon,
-  tools: shieldIcon,
-};
+const destinationIcons: Record<AppDestinationId, string> = APP_DESTINATION_ICONS;
 
 function normalizedNotificationCount(count: number | undefined): number {
   if (typeof count !== "number" || !Number.isFinite(count)) return 0;

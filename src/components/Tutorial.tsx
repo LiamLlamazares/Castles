@@ -7,6 +7,14 @@ import GameBoard from "./Game";
 import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import { getAllLessons, TutorialLesson } from "../tutorial";
 import { getLessonObjectives, getTutorialInspectionKey, objectiveMatchesTutorialEvent } from "../tutorial/objectives";
+import {
+  createDefaultTutorialProgress,
+  orderTutorialLessonIds,
+  readStoredTutorialProgress,
+  sanitizeTutorialProgress,
+  saveStoredTutorialProgress,
+  TutorialProgressState,
+} from "../tutorial/progress";
 import type { TutorialGameEvent } from "../tutorial/types";
 import { getImageByPieceType } from "./PieceImages";
 import { PieceType } from "../Constants";
@@ -28,19 +36,6 @@ interface TutorialProps {
   onOpenProfile?: () => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
-}
-
-const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
-
-interface TutorialProgressState {
-  lastLessonId: string;
-  completedLessonIds: string[];
-  checkedObjectiveIdsByLessonId: Record<string, string[]>;
-}
-
-interface StoredTutorialProgress {
-  progress: TutorialProgressState;
-  canStoreProgress: boolean;
 }
 
 interface TutorialModuleDescriptor {
@@ -120,98 +115,6 @@ const TERRAIN_LESSONS: TerrainLessonShortcut[] = [
   { id: "m1_l4_terrain_sanctuaries", label: "Sanctuaries", hexClass: "hexagon-sanctuary hexagon-sanctuary-phoenix" },
 ];
 
-function createDefaultTutorialProgress(lessons: TutorialLesson[]): TutorialProgressState {
-  return {
-    lastLessonId: lessons[0]?.id ?? "",
-    completedLessonIds: [],
-    checkedObjectiveIdsByLessonId: {},
-  };
-}
-
-function orderLessonIds(ids: Iterable<string>, lessons: TutorialLesson[]): string[] {
-  const idSet = new Set(ids);
-  return lessons.filter((lesson) => idSet.has(lesson.id)).map((lesson) => lesson.id);
-}
-
-function sanitizeTutorialProgress(raw: unknown, lessons: TutorialLesson[]): TutorialProgressState {
-  const defaults = createDefaultTutorialProgress(lessons);
-  if (!raw || typeof raw !== "object") {
-    return defaults;
-  }
-
-  const lessonIds = new Set(lessons.map((lesson) => lesson.id));
-  const record = raw as Partial<TutorialProgressState>;
-  const lastLessonId = typeof record.lastLessonId === "string" && lessonIds.has(record.lastLessonId)
-    ? record.lastLessonId
-    : defaults.lastLessonId;
-  const completed = new Set<string>();
-  const rawCompletedLessonIds = Array.isArray(record.completedLessonIds)
-    ? new Set(record.completedLessonIds.filter((id): id is string => typeof id === "string" && lessonIds.has(id)))
-    : new Set<string>();
-  const checkedObjectiveIdsByLessonId: Record<string, string[]> = {};
-  const rawCheckedIds = record.checkedObjectiveIdsByLessonId && typeof record.checkedObjectiveIdsByLessonId === "object"
-    ? record.checkedObjectiveIdsByLessonId
-    : {};
-
-  for (const lesson of lessons) {
-    const objectives = getLessonObjectives(lesson);
-    const objectiveIdSet = new Set(objectives.map((objective) => objective.id));
-    const checked = new Set<string>();
-    const rawLessonCheckedIds = rawCheckedIds[lesson.id];
-    if (Array.isArray(rawLessonCheckedIds)) {
-      for (const objectiveId of rawLessonCheckedIds) {
-        if (typeof objectiveId === "string" && objectiveIdSet.has(objectiveId)) {
-          checked.add(objectiveId);
-        }
-      }
-    }
-
-    const orderedCheckedIds = objectives
-      .map((objective) => objective.id)
-      .filter((objectiveId) => checked.has(objectiveId));
-    if (orderedCheckedIds.length > 0) {
-      checkedObjectiveIdsByLessonId[lesson.id] = orderedCheckedIds;
-    }
-
-    if (objectives.length > 0) {
-      if (objectives.every((objective) => checked.has(objective.id))) {
-        completed.add(lesson.id);
-      }
-    } else if (rawCompletedLessonIds.has(lesson.id)) {
-      completed.add(lesson.id);
-    }
-  }
-
-  return {
-    lastLessonId,
-    completedLessonIds: orderLessonIds(completed, lessons),
-    checkedObjectiveIdsByLessonId,
-  };
-}
-
-function readStoredTutorialProgress(lessons: TutorialLesson[]): StoredTutorialProgress {
-  try {
-    const stored = localStorage.getItem(TUTORIAL_PROGRESS_KEY);
-    if (!stored) {
-      return { progress: createDefaultTutorialProgress(lessons), canStoreProgress: true };
-    }
-    return { progress: sanitizeTutorialProgress(JSON.parse(stored), lessons), canStoreProgress: true };
-  } catch (error) {
-    console.error("Failed to load tutorial progress", error);
-    return { progress: createDefaultTutorialProgress(lessons), canStoreProgress: false };
-  }
-}
-
-function saveStoredTutorialProgress(progress: TutorialProgressState): boolean {
-  try {
-    localStorage.setItem(TUTORIAL_PROGRESS_KEY, JSON.stringify(progress));
-    return true;
-  } catch (error) {
-    console.error("Failed to save tutorial progress", error);
-    return false;
-  }
-}
-
 function getLessonModuleLabel(lessonId: string): string {
   if (lessonId.startsWith("m0_")) return "Getting started";
   if (lessonId.startsWith("m1_")) return "Terrain";
@@ -256,7 +159,7 @@ function completeLessonInProgress(
   return {
     ...progress,
     checkedObjectiveIdsByLessonId,
-    completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+    completedLessonIds: orderTutorialLessonIds(completedLessonIds, lessons),
   };
 }
 
@@ -295,7 +198,7 @@ function completeObjectiveIdsInProgress(
   return {
     ...progress,
     checkedObjectiveIdsByLessonId,
-    completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+    completedLessonIds: orderTutorialLessonIds(completedLessonIds, lessons),
   };
 }
 
@@ -489,7 +392,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
       return {
         ...previous,
-        completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+        completedLessonIds: orderTutorialLessonIds(completedLessonIds, lessons),
         checkedObjectiveIdsByLessonId,
       };
     });

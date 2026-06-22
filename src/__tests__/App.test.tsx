@@ -30,6 +30,9 @@ import {
   rememberOpenSeekCreatorParams,
   resolveOnlineChallengeShareUrl,
 } from "../online/client";
+import { getAllLessons } from "../tutorial";
+import { getLessonObjectives } from "../tutorial/objectives";
+import { saveStoredTutorialProgress, TUTORIAL_PROGRESS_STORAGE_KEY } from "../tutorial/progress";
 
 const APP_TEST_PROFILE_AVATAR = { schemaVersion: 1, preset: "monarch", color: "green" };
 
@@ -74,7 +77,7 @@ vi.mock("../components/Game", () => ({
     initialPoolTypes?: unknown[];
     onSetup: () => void;
     onRestart: () => void;
-    onTutorial: () => void;
+    onTutorial?: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
     onReturnFromAnalysis?: () => void;
@@ -155,9 +158,11 @@ vi.mock("../components/Game", () => ({
       >
         Mock Load Rich Game
       </button>
-      <button type="button" onClick={props.onTutorial}>
-        Open Tutorial
-      </button>
+      {props.onTutorial && (
+        <button type="button" onClick={props.onTutorial}>
+          Open Tutorial
+        </button>
+      )}
       <button type="button" onClick={props.onOpenLibrary}>
         Open Library
       </button>
@@ -254,7 +259,7 @@ vi.mock("../components/GameSetup", () => ({
     onPlay: (...args: unknown[]) => void;
     onBack: () => void;
     backLabel?: string;
-    onTutorial: () => void;
+    onTutorial?: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
     onCreateOnlineChallenge?: (...args: unknown[]) => void;
@@ -310,9 +315,11 @@ vi.mock("../components/GameSetup", () => ({
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
-      <button type="button" onClick={onTutorial}>
-        Setup Tutorial
-      </button>
+      {onTutorial && (
+        <button type="button" onClick={onTutorial}>
+          Setup Tutorial
+        </button>
+      )}
       <button type="button" onClick={onOpenLibrary}>
         Setup Library
       </button>
@@ -813,6 +820,27 @@ function startRatedRichLocalGameFromSetup() {
   fireEvent.click(screen.getByRole("button", { name: "Start Rated Rich Local Game" }));
 }
 
+function createCompletedTutorialProgress() {
+  const lessons = getAllLessons();
+  const checkedObjectiveIdsByLessonId = Object.fromEntries(
+    lessons
+      .map((lesson) => [lesson.id, getLessonObjectives(lesson).map((objective) => objective.id)] as const)
+      .filter(([, objectiveIds]) => objectiveIds.length > 0)
+  );
+  return {
+    lastLessonId: lessons.at(-1)?.id ?? "",
+    completedLessonIds: lessons.map((lesson) => lesson.id),
+    checkedObjectiveIdsByLessonId,
+  };
+}
+
+function storeCompletedTutorialProgress() {
+  localStorage.setItem(
+    TUTORIAL_PROGRESS_STORAGE_KEY,
+    JSON.stringify(createCompletedTutorialProgress())
+  );
+}
+
 function spectatorSnapshot(gameId: string): OnlineGameSnapshotDTO {
   return {
     gameId,
@@ -1050,6 +1078,51 @@ describe("App game setup lifecycle", () => {
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
+  });
+
+  it("hides primary Tutorial destinations after the tutorial is complete", async () => {
+    storeCompletedTutorialProgress();
+    window.history.replaceState({}, "", "/");
+
+    render(<App />);
+
+    expect(await screen.findByText("Game Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Tutorial" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Online" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Setup Tutorial" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Setup Online" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup Online" }));
+
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Online Tutorial" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Online Library" })).toBeInTheDocument();
+  });
+
+  it("updates primary Tutorial destinations when completion is saved while mounted", async () => {
+    window.history.replaceState({}, "", "/");
+
+    render(<App />);
+
+    expect(await screen.findByText("Game Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Tutorial" })).toBeInTheDocument();
+
+    act(() => {
+      saveStoredTutorialProgress(createCompletedTutorialProgress());
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Open Tutorial" })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Setup Tutorial" })).not.toBeInTheDocument();
   });
 
   it("opens setup after the player chooses to set up a game", async () => {

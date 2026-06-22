@@ -79,8 +79,8 @@ const AVATAR_PRESET_OPTIONS: Array<{ value: OnlineAccountAvatarPreset; label: st
 const DEFAULT_PROFILE_AVATAR: OnlineAccountAvatar = { schemaVersion: 1, preset: "monarch", color: "green" };
 
 const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; label: string }> = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
+  { value: "dark", label: "Night" },
+  { value: "light", label: "Day" },
   { value: "system", label: "System" },
 ];
 

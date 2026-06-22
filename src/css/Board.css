@@ -376,8 +376,8 @@ body {
 .game-shell {
   --game-corner-chrome-left: 16px;
   --game-corner-chrome-top: 16px;
-  --game-corner-chrome-width: 372px;
-  --game-corner-chrome-height: 104px;
+  --game-corner-chrome-width: 48px;
+  --game-corner-chrome-height: 372px;
   height: 100dvh;
   width: 100vw;
   display: grid;
@@ -386,11 +386,6 @@ body {
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow: hidden;
   position: relative;
-}
-
-.game-shell.game-corner-shortcuts-collapsed {
-  --game-corner-chrome-width: 48px;
-  --game-corner-chrome-height: 48px;
 }
 
 .game-board-stage {
@@ -1333,10 +1328,14 @@ body {
 
 .game-corner-bar {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.game-corner-nav-column {
+  align-items: stretch;
 }
 
 .game-corner-button {
@@ -2824,11 +2823,6 @@ body {
     --game-corner-chrome-height: 44px;
   }
 
-  .game-shell.game-corner-shortcuts-collapsed {
-    --game-corner-chrome-width: 44px;
-    --game-corner-chrome-height: 44px;
-  }
-
   .hamburger-container {
     top: var(--game-corner-chrome-top, 12px);
     left: var(--game-corner-chrome-left, 12px);
@@ -2841,10 +2835,6 @@ body {
 
   .game-corner-bar {
     gap: 5px;
-  }
-
-  .game-corner-bar[aria-label="Board shortcuts"] {
-    display: none;
   }
 
   .hamburger-button,
