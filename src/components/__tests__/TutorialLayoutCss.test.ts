@@ -70,8 +70,12 @@ describe("Tutorial mobile layout CSS", () => {
     const backdropRule = css.match(/\.menu-backdrop\s*\{[^}]+}/)?.[0] ?? "";
     const iconFrameRule = css.match(/\.menu-item-icon-frame\s*\{[^}]+}/)?.[0] ?? "";
     const iconRule = css.match(/\.menu-item-icon,\s*\.menu-item > img\s*\{[^}]+}/)?.[0] ?? "";
+    const collapsedChromeRule = css.match(/\.game-shell\.game-corner-shortcuts-collapsed\s*\{[^}]+}/)?.[0] ?? "";
 
     expect(openContainerRule).toContain("z-index: 4000;");
+    expect(collapsedChromeRule).toContain("--game-corner-chrome-width: 48px;");
+    expect(collapsedChromeRule).toContain("--game-corner-chrome-height: 48px;");
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.game-shell\.game-corner-shortcuts-collapsed\s*\{[^}]*--game-corner-chrome-width:\s*44px;[^}]*--game-corner-chrome-height:\s*44px;/s);
     expect(drawerRule).toContain("z-index: 4002;");
     expect(menuItemsRule).toContain("flex: 1 1 auto;");
     expect(menuItemsRule).toContain("min-height: 0;");

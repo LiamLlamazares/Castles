@@ -388,6 +388,11 @@ body {
   position: relative;
 }
 
+.game-shell.game-corner-shortcuts-collapsed {
+  --game-corner-chrome-width: 48px;
+  --game-corner-chrome-height: 48px;
+}
+
 .game-board-stage {
   grid-column: 1;
   grid-row: 1;
@@ -2815,6 +2820,11 @@ body {
   .game-shell {
     --game-corner-chrome-left: 12px;
     --game-corner-chrome-top: 12px;
+    --game-corner-chrome-width: 44px;
+    --game-corner-chrome-height: 44px;
+  }
+
+  .game-shell.game-corner-shortcuts-collapsed {
     --game-corner-chrome-width: 44px;
     --game-corner-chrome-height: 44px;
   }

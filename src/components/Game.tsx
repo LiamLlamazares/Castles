@@ -189,6 +189,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [lastLibrarySavedPgn, setLastLibrarySavedPgn] = React.useState<string | null>(null);
   const [isNavigationMenuOpen, setNavigationMenuOpen] = React.useState(false);
+  const [areNavigationShortcutsVisible, setNavigationShortcutsVisible] = React.useState(true);
   const [onlineVisibilityOverride, setOnlineVisibilityOverride] =
     React.useState<OnlineGameVisibility | null>(null);
   const [isOnlineVisibilityPending, setOnlineVisibilityPending] = React.useState(false);
@@ -898,6 +899,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     isTutorialMode ? "tutorial-game-shell" : "",
     onlineSession ? "has-online-session" : "",
     isNavigationMenuOpen ? "navigation-open" : "",
+    areNavigationShortcutsVisible ? "" : "game-corner-shortcuts-collapsed",
   ].filter(Boolean).join(" ");
 
   return (
@@ -926,6 +928,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           }
           onTutorial={onTutorial}
           onOpenChange={setNavigationMenuOpen}
+          onShortcutsVisibilityChange={setNavigationShortcutsVisible}
           isAnalysisMode={isAnalysisMode}
           onEnableAnalysis={canOpenAnalysisBoard ? handleEnterAnalysis : undefined}
           onToggleShields={viewState.toggleShields}

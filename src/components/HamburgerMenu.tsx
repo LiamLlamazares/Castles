@@ -9,13 +9,23 @@ import scrollIcon from "../Assets/Images/misc/scroll.svg";
 import rotateIcon from "../Assets/Images/Board/rotate.svg";
 import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
-import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import crownIcon from "../Assets/Images/misc/crown.svg";
+import footprintIcon from "../Assets/Images/misc/footprint.svg";
+import glitterIcon from "../Assets/Images/misc/glitter.svg";
 import hexTilesIcon from "../Assets/Images/misc/hex-tiles.svg";
+import pawnIcon from "../Assets/Images/misc/pawn.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import starIcon from "../Assets/Images/misc/star.svg";
 import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
+import wizardIcon from "../Assets/Images/misc/wizard.svg";
+
+const shouldUseDrawerMenu = () => {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return true;
+  }
+  return window.matchMedia("(max-width: 760px)").matches;
+};
 
 interface HamburgerMenuProps {
   onExportPGN: () => void;
@@ -37,6 +47,7 @@ interface HamburgerMenuProps {
   onEditPosition?: () => void;
   onTutorial?: () => void;
   onOpenChange?: (isOpen: boolean) => void;
+  onShortcutsVisibilityChange?: (areVisible: boolean) => void;
   isAnalysisMode?: boolean;
   onToggleTerrainIcons?: () => void;
   onToggleSanctuaryIcons?: () => void;
@@ -70,6 +81,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onEditPosition,
   onTutorial,
   onOpenChange,
+  onShortcutsVisibilityChange,
   isAnalysisMode = false,
   onToggleShields,
   onToggleCastleRecruitment,
@@ -83,6 +95,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   showCoordinates = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [areShortcutsVisible, setAreShortcutsVisible] = useState(true);
+  const [usesDrawerMenu, setUsesDrawerMenu] = useState(shouldUseDrawerMenu);
   const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -144,6 +158,29 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     menuButtonModalStateRef.current = null;
   }, []);
 
+  const setShortcutsVisible = React.useCallback((nextVisible: boolean) => {
+    setAreShortcutsVisible(nextVisible);
+    onShortcutsVisibilityChange?.(nextVisible);
+  }, [onShortcutsVisibilityChange]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(max-width: 760px)");
+    const syncMenuMode = () => {
+      setUsesDrawerMenu(query.matches);
+      if (query.matches) {
+        setShortcutsVisible(true);
+      }
+    };
+    syncMenuMode();
+    if (typeof query.addEventListener === "function") {
+      query.addEventListener("change", syncMenuMode);
+      return () => query.removeEventListener("change", syncMenuMode);
+    }
+    query.addListener?.(syncMenuMode);
+    return () => query.removeListener?.(syncMenuMode);
+  }, [setShortcutsVisible]);
+
   const setMenuOpen = React.useCallback((nextOpen: boolean) => {
     if (nextOpen) {
       const activeElement = document.activeElement;
@@ -159,6 +196,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
       const restoreTarget = restoreFocusRef.current ?? menuButtonRef.current;
       if (restoreTarget && document.contains(restoreTarget)) {
         restoreTarget.focus();
+      } else if (menuButtonRef.current && document.contains(menuButtonRef.current)) {
+        menuButtonRef.current.focus();
       }
     }
     onOpenChange?.(nextOpen);
@@ -304,6 +343,22 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     // Do not close menu
   };
 
+  const handleMenuButtonClick = () => {
+    if (usesDrawerMenu) {
+      setMenuOpen(!isOpen);
+      return;
+    }
+    if (isOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    setShortcutsVisible(!areShortcutsVisible);
+  };
+
+  const handleMoreOptionsClick = () => {
+    setMenuOpen(true);
+  };
+
   const renderImageIcon = (src: string) => (
     <span className="menu-item-icon-frame" aria-hidden="true">
       <img className="menu-item-icon" src={src} alt="" />
@@ -342,34 +397,55 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   };
 
   return (
-    <div className={`hamburger-container ${isOpen ? "open" : ""}`} ref={menuRef}>
+    <div
+      className={[
+        "hamburger-container",
+        isOpen ? "open" : "",
+        areShortcutsVisible ? "shortcuts-visible" : "shortcuts-collapsed",
+      ].filter(Boolean).join(" ")}
+      ref={menuRef}
+    >
       <div className="game-corner-bars" aria-label="Game shortcuts">
         <div className="game-corner-bar" role="toolbar" aria-label="Navigation shortcuts">
           <button
             className={`hamburger-button game-corner-button ${isOpen ? "active" : ""}`}
             ref={menuButtonRef}
-            onClick={() => setMenuOpen(!isOpen)}
-            aria-label="Menu"
-            aria-expanded={isOpen}
-            title="Menu"
+            onClick={handleMenuButtonClick}
+            aria-label={
+              usesDrawerMenu
+                ? "Menu"
+                : areShortcutsVisible
+                  ? "Hide shortcuts"
+                  : "Show shortcuts"
+            }
+            aria-expanded={usesDrawerMenu ? isOpen : areShortcutsVisible}
+            aria-pressed={usesDrawerMenu ? undefined : areShortcutsVisible}
+            title={
+              usesDrawerMenu
+                ? "Menu"
+                : areShortcutsVisible
+                  ? "Hide shortcuts"
+                  : "Show shortcuts"
+            }
           >
             <span className="hamburger-icon">☰</span>
           </button>
-          {!isOpen && (
+          {!isOpen && areShortcutsVisible && (
             <>
               {cornerButton("Play setup", onNewGame, renderCornerIcon(flagIcon))}
-              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(lightbulbIcon))}
+              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(wizardIcon))}
               {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(castleIcon))}
-              {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(crownIcon), {
+              {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(pawnIcon), {
                 badge: normalizedOnlineNotificationCount > 0 ? peopleBadge : undefined,
               })}
               {cornerButton("Open profile", onOpenProfile, renderCornerIcon(crownIcon))}
               {cornerButton("Open library", onOpenLibrary, renderCornerIcon(scrollsIcon))}
+              {cornerButton("More options", handleMoreOptionsClick, renderCornerIcon(glitterIcon))}
             </>
           )}
         </div>
 
-        {!isOpen && (
+        {!isOpen && areShortcutsVisible && (
           <div className="game-corner-bar" role="toolbar" aria-label="Board shortcuts">
             {cornerButton("Flip board view", onFlipBoard, renderCornerIcon(rotateIcon))}
             {cornerButton("Toggle board coordinates", onToggleCoordinates, renderCornerIcon(hexTilesIcon), {
@@ -377,7 +453,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               mobileOptional: true,
             })}
             {cornerButton("Show rules", onShowRules, renderCornerIcon(scrollIcon), { mobileOptional: true })}
-            {onReturnFromAnalysis && cornerButton(analysisReturnLabel, onReturnFromAnalysis, renderCornerIcon(rotateIcon), {
+            {onReturnFromAnalysis && cornerButton(analysisReturnLabel, onReturnFromAnalysis, renderCornerIcon(footprintIcon), {
               className: "primary",
               mobileOptional: true,
             })}
@@ -444,7 +520,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
-                  {renderImageIcon(lightbulbIcon)}
+                  {renderImageIcon(wizardIcon)}
                   <span>Tutorial</span>
                 </button>
               )}
@@ -480,7 +556,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     aria-label={peopleLabel}
                     title={peopleLabel}
                   >
-                    {renderImageIcon(crownIcon)}
+                    {renderImageIcon(pawnIcon)}
                     <span>People</span>
                     {normalizedOnlineNotificationCount > 0 && (
                       <span className="menu-item-badge" aria-hidden="true">
