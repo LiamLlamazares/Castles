@@ -875,6 +875,26 @@ describe("Game ability integration", () => {
     expect(screen.getByText("Online Black · Your turn · Movement")).toBeInTheDocument();
   });
 
+  test("visible board rotate control toggles board orientation", () => {
+    const { container } = render(
+      <ThemeProvider>
+        <GameBoard />
+      </ThemeProvider>
+    );
+
+    const rotateButton = screen.getByRole("button", { name: "Rotate board" });
+    const boardStage = container.querySelector(".game-board-stage");
+
+    expect(rotateButton).toHaveTextContent("Rotate");
+    expect(rotateButton).toHaveAttribute("aria-pressed", "false");
+    expect(boardStage).toHaveAttribute("data-board-orientation", "default");
+
+    fireEvent.click(rotateButton);
+
+    expect(rotateButton).toHaveAttribute("aria-pressed", "true");
+    expect(boardStage).toHaveAttribute("data-board-orientation", "rotated");
+  });
+
   test("active online players do not get drawer analysis or position-edit escape hatches", () => {
     const onLoadGame = vi.fn();
     const onEditPosition = vi.fn();

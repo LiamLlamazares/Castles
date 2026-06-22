@@ -2713,6 +2713,7 @@ describe("OnlineGameBrowser", () => {
   });
 
   it("clears a locally accepted challenge when an authoritative all-inbox refresh omits it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
     const acceptedSummary = {

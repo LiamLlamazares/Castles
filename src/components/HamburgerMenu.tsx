@@ -313,7 +313,13 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     label: string,
     action: (() => void) | undefined,
     icon: React.ReactNode,
-    options: { active?: boolean; badge?: string; className?: string; mobileOptional?: boolean } = {}
+    options: {
+      active?: boolean;
+      badge?: string;
+      className?: string;
+      mobileOptional?: boolean;
+      visibleLabel?: string;
+    } = {}
   ) => {
     if (!action) return null;
     return (
@@ -331,6 +337,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
         aria-pressed={options.active === undefined ? undefined : options.active}
       >
         {icon}
+        {options.visibleLabel && <span className="game-corner-button-label">{options.visibleLabel}</span>}
         {options.badge && <span className="game-corner-badge" aria-hidden="true">{options.badge}</span>}
       </button>
     );
@@ -355,17 +362,29 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             title="Menu"
           >
             <span className="hamburger-icon">☰</span>
+            <span className="game-corner-button-label">Menu</span>
           </button>
           {!isOpen && (
             <>
-              {cornerButton("Play setup", onNewGame, renderCornerIcon(APP_ICON_ASSETS.play))}
-              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(APP_ICON_ASSETS.tutorial))}
-              {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(APP_ICON_ASSETS.online))}
+              {cornerButton("Play setup", onNewGame, renderCornerIcon(APP_ICON_ASSETS.play), {
+                visibleLabel: "Play",
+              })}
+              {cornerButton("Open tutorial", onTutorial, renderCornerIcon(APP_ICON_ASSETS.tutorial), {
+                visibleLabel: "Tutorial",
+              })}
+              {cornerButton("Open online lobby", onOpenOnlineBrowser, renderCornerIcon(APP_ICON_ASSETS.online), {
+                visibleLabel: "Online",
+              })}
               {cornerButton(peopleShortcutLabel, onOpenPeople, renderCornerIcon(APP_ICON_ASSETS.people), {
                 badge: normalizedOnlineNotificationCount > 0 ? peopleBadge : undefined,
+                visibleLabel: "People",
               })}
-              {cornerButton("Open profile", onOpenProfile, renderCornerIcon(APP_ICON_ASSETS.profile))}
-              {cornerButton("Open library", onOpenLibrary, renderCornerIcon(APP_ICON_ASSETS.library))}
+              {cornerButton("Open profile", onOpenProfile, renderCornerIcon(APP_ICON_ASSETS.profile), {
+                visibleLabel: "Profile",
+              })}
+              {cornerButton("Open library", onOpenLibrary, renderCornerIcon(APP_ICON_ASSETS.library), {
+                visibleLabel: "Library",
+              })}
             </>
           )}
         </div>

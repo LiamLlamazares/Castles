@@ -85,7 +85,15 @@ describe("HamburgerMenu", () => {
     });
 
     expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Navigation shortcuts" })).toBeInTheDocument();
+    const toolbar = screen.getByRole("toolbar", { name: "Navigation shortcuts" });
+    expect(toolbar).toBeInTheDocument();
+    expect(toolbar).toHaveTextContent("Menu");
+    expect(toolbar).toHaveTextContent("Play");
+    expect(toolbar).toHaveTextContent("Tutorial");
+    expect(toolbar).toHaveTextContent("Online");
+    expect(toolbar).toHaveTextContent("People");
+    expect(toolbar).toHaveTextContent("Profile");
+    expect(toolbar).toHaveTextContent("Library");
     expect(screen.queryByRole("toolbar", { name: "Board shortcuts" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open people, 3 challenge activities" }).querySelector(".game-corner-badge")).toHaveTextContent("3");
 
@@ -97,6 +105,7 @@ describe("HamburgerMenu", () => {
     expect(props.onOpenProfile).toHaveBeenCalledOnce();
     expect(props.onOpenLibrary).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "Flip board view" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rotate board" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "More options" })).not.toBeInTheDocument();
   });
 

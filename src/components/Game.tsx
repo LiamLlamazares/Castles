@@ -14,6 +14,7 @@ import { useTooltip } from "../hooks/useTooltip";
 import ControlPanel from "./ControlPanel";
 import type { PlayerIdentity } from "./ControlPanel";
 import HamburgerMenu from "./HamburgerMenu";
+import { APP_ICON_ASSETS } from "./appIconRegistry";
 import { BoardContainer } from "./Board/BoardContainer";
 import { GameHUD } from "./HUD/GameHUD";
 import { GameOverlays } from "./Overlays/GameOverlays";
@@ -897,6 +898,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     "game-shell",
     isTutorialMode ? "tutorial-game-shell" : "",
     onlineSession ? "has-online-session" : "",
+    showNavigationMenu && !isTutorialMode ? "has-board-quick-controls" : "",
     isNavigationMenuOpen ? "navigation-open" : "",
   ].filter(Boolean).join(" ");
 
@@ -1083,6 +1085,21 @@ const InnerGame: React.FC<GameBoardProps> = ({
         className="game-board-stage"
         data-board-orientation={viewState.isBoardRotated ? "rotated" : "default"}
       >
+        {showNavigationMenu && !isTutorialMode && !isNavigationMenuOpen && (
+          <div className="game-board-quick-controls" role="toolbar" aria-label="Board quick controls">
+            <button
+              type="button"
+              className={`game-corner-button board-quick-button ${viewState.isBoardRotated ? "active" : ""}`}
+              onClick={viewState.handleFlipBoard}
+              aria-label="Rotate board"
+              aria-pressed={viewState.isBoardRotated}
+              title="Rotate board"
+            >
+              <img className="game-corner-icon" src={APP_ICON_ASSETS.rotate} alt="" aria-hidden="true" />
+              <span className="game-corner-button-label">Rotate</span>
+            </button>
+          </div>
+        )}
         <BoardContainer
           layout={initialLayout}
           pieceTheme={pieceTheme || "Castles"}

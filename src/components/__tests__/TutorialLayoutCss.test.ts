@@ -73,10 +73,16 @@ describe("Tutorial mobile layout CSS", () => {
     const gameShellRule = css.match(/\.game-shell\s*\{[^}]+}/)?.[0] ?? "";
 
     expect(openContainerRule).toContain("z-index: 4000;");
-    expect(gameShellRule).toContain("--game-corner-chrome-width: 48px;");
+    expect(gameShellRule).toContain("--game-corner-chrome-width: 68px;");
     expect(gameShellRule).toContain("--game-corner-chrome-height: 372px;");
+    expect(css).toContain(".game-corner-button-label");
+    expect(css).toContain(".game-board-quick-controls");
+    expect(css).toContain(".board-quick-button");
+    expect(css).toMatch(/@media \(min-width: 761px\)\s*\{[\s\S]*\.game-shell\.has-board-quick-controls \.online-session-badge\s*\{[^}]*right:\s*calc\(320px \+ 112px\);/s);
     expect(css).not.toContain("game-corner-shortcuts-collapsed");
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.game-shell\s*\{[^}]*--game-corner-chrome-width:\s*44px;[^}]*--game-corner-chrome-height:\s*44px;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.game-corner-button-label,\s*[\s\S]*\.game-board-quick-controls\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.game-shell\.has-board-quick-controls \.online-session-badge\s*\{[^}]*right:\s*12px;/s);
     expect(drawerRule).toContain("z-index: 4002;");
     expect(menuItemsRule).toContain("flex: 1 1 auto;");
     expect(menuItemsRule).toContain("min-height: 0;");
@@ -99,9 +105,11 @@ describe("Tutorial mobile layout CSS", () => {
 
     expect(hintRule).toContain("top: 16px;");
     expect(hintRule).toContain("bottom: auto;");
-    expect(hintRule).toContain("left: calc(var(--game-corner-chrome-left, 16px) + var(--game-corner-chrome-width, 104px) + 12px);");
+    expect(hintRule).toContain("left: calc(var(--game-corner-chrome-left, 16px) + var(--game-corner-chrome-width, 68px) + 12px);");
     expect(hintRule).toContain("right: auto;");
     expect(hintRule).toContain("max-width: 320px;");
+    expect(hintRule).toContain("box-sizing: border-box;");
+    expect(css).toMatch(/@media \(min-width: 761px\) and \(max-width: 960px\)\s*\{[\s\S]*\.game-shell\.has-board-quick-controls \.tooltip-hint-banner\s*\{[^}]*width:\s*min\(260px,\s*calc\(100vw - 526px\)\);[^}]*max-width:\s*260px;/s);
   });
 
   it("sizes the board container to its parent stage rather than a full viewport", () => {
