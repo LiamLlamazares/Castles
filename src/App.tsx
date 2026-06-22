@@ -1194,7 +1194,11 @@ function App() {
             ? 'Back to Library'
             : currentBackTarget === 'menu'
               ? 'Back to menu'
-              : 'Back to game';
+              : currentBackTarget === 'people'
+                ? 'Back to People'
+                : currentBackTarget === 'profile'
+                  ? 'Back to Profile'
+                  : 'Back to game';
 
   const quickMatchSetup = useMemo(() => {
     if (!gameConfig.board || !gameConfig.pieces) return null;
@@ -1235,6 +1239,10 @@ function App() {
       clock: `Timed ${clock.initial}+${clock.increment}`,
       scoring: onlineLobbySetup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control",
       rating: onlineLobbySetup.ratingMode === "rated" ? "Rated" : "Casual",
+      pieceSet: `Piece Set ${onlineLobbySetup.pieceTheme ?? "Castles"}`,
+      sanctuaryCount: onlineLobbySetup.sanctuaries.length,
+      poolCount: onlineLobbySetup.initialPoolTypes?.length ?? 0,
+      pledgeCooldown: onlineLobbySetup.sanctuarySettings?.cooldown,
     };
   }, [onlineLobbySetup]);
 
@@ -1955,8 +1963,13 @@ function App() {
       }
     }
     if (!setup) {
-      alert("Choose a Play setup before challenging an account.");
-      throw new Error("A Play setup is required before challenging an account.");
+      setOnlineChallengeShareMessage("Choose a Play setup, then return to People or Profile to challenge the account.");
+      enterSetupView(view === "setup" ? "people" : view);
+      throw new OnlineRequestError(
+        400,
+        "bad_request",
+        "Choose a Play setup from Play, then challenge this account again."
+      );
     }
     const created = await createChallengeFromSetup(setup, {
       challengedDisplayName: displayName,
@@ -1977,8 +1990,13 @@ function App() {
       throw new Error("Online account sign-in is required before challenging an account.");
     }
     if (!onlineLobbySetup) {
-      alert("Choose a Play setup before challenging an account.");
-      throw new Error("A Play setup is required before challenging an account.");
+      setOnlineChallengeShareMessage("Choose a Play setup, then return to People or Profile to copy a challenge invite.");
+      enterSetupView(view === "setup" ? "people" : view);
+      throw new OnlineRequestError(
+        400,
+        "bad_request",
+        "Choose a Play setup from Play, then copy this challenge invite again."
+      );
     }
     const created = await createChallengeFromSetup(onlineLobbySetup, { challengedDisplayName: displayName });
     if (!created) {
@@ -2851,6 +2869,7 @@ function App() {
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenPeople={handleOpenPeople}
           onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
@@ -3114,6 +3133,7 @@ function App() {
               onTutorial={handleTutorialClick}
               onOpenLibrary={handleOpenLibrary}
               onOpenOnlineBrowser={handleOpenOnlineBrowser}
+              onOpenPeople={handleOpenPeople}
               onOpenProfile={handleOpenProfile}
               onReturnFromAnalysis={analysisReturn ? handleReturnFromAnalysis : undefined}
               analysisReturnLabel={analysisReturn?.label}
@@ -3245,6 +3265,7 @@ function App() {
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenPeople={handleOpenPeople}
           onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}

@@ -1,5 +1,6 @@
 import React from "react";
 import AppShellNav, { type AppShellDestination } from "./AppShellNav";
+import ThemeContext, { type ThemeMode } from "../contexts/ThemeContext";
 import {
   formatOnlineGameResult,
   OnlineRequestError,
@@ -20,7 +21,6 @@ import {
 import type {
   OnlineAccountFollowingResponse,
   OnlineAccountAvatar,
-  OnlineAccountAvatarColor,
   OnlineAccountAvatarImageMimeType,
   OnlineAccountAvatarPreset,
   OnlineAccountProfilePatch,
@@ -38,6 +38,12 @@ import type {
 } from "../online/social";
 import type { OnlineAccountChallengeDirectoryResponse } from "../online/challenges";
 import type { OnlineGameDirectoryResponse, OnlineGameSummary } from "../online/readModel";
+import type { PieceTheme } from "../Constants";
+import {
+  PIECE_THEME_OPTIONS,
+  readPreferredPieceTheme,
+  writePreferredPieceTheme,
+} from "../preferences/displayPreferences";
 import "../css/OnlineProfileDashboard.css";
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -69,13 +75,12 @@ const AVATAR_PRESET_OPTIONS: Array<{ value: OnlineAccountAvatarPreset; label: st
   { value: "assassin", label: "Assassin", mark: "N" },
 ];
 
-const AVATAR_COLOR_OPTIONS: Array<{ value: OnlineAccountAvatarColor; label: string }> = [
-  { value: "green", label: "Green" },
-  { value: "amber", label: "Amber" },
-  { value: "blue", label: "Blue" },
-  { value: "violet", label: "Violet" },
-  { value: "red", label: "Red" },
-  { value: "slate", label: "Slate" },
+const DEFAULT_PROFILE_AVATAR: OnlineAccountAvatar = { schemaVersion: 1, preset: "monarch", color: "green" };
+
+const THEME_MODE_OPTIONS: Array<{ value: ThemeMode; label: string }> = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
 ];
 
 interface OnlineProfileDashboardProps {
@@ -138,14 +143,6 @@ function isPresencePrivate(profile: OnlineAccountPublicProfile | null): boolean 
 
 function isUploadedAvatar(avatar: OnlineAccountAvatar): avatar is OnlineAccountAvatar & { imageDataUrl: string } {
   return "imageDataUrl" in avatar;
-}
-
-function presetAvatarColor(avatar: OnlineAccountAvatar | null): OnlineAccountAvatarColor {
-  return avatar && !isUploadedAvatar(avatar) ? avatar.color : "green";
-}
-
-function presetAvatarPreset(avatar: OnlineAccountAvatar | null): OnlineAccountAvatarPreset {
-  return avatar && !isUploadedAvatar(avatar) ? avatar.preset : "monarch";
 }
 
 function avatarMark(avatar: OnlineAccountAvatar): string {
@@ -481,8 +478,12 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   onlineNotificationCount = 0,
   onlineNotificationLabel = "challenge activities",
 }) => {
+  const themeContext = React.useContext(ThemeContext);
+  const themeMode = themeContext?.themeMode ?? "dark";
+  const setThemeMode = themeContext?.setThemeMode ?? (() => {});
   const [profile, setProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [avatarDraft, setAvatarDraft] = React.useState<OnlineAccountAvatar | null>(null);
+  const [pieceThemePreference, setPieceThemePreference] = React.useState<PieceTheme>(() => readPreferredPieceTheme());
   const [profileStatus, setProfileStatus] = React.useState<LoadStatus>("loading");
   const [activeGames, setActiveGames] = React.useState<OnlineGameSummary[]>([]);
   const [completedGames, setCompletedGames] = React.useState<OnlineGameSummary[]>([]);
@@ -801,6 +802,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     newPassword.length <= ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH &&
     passwordStatus !== "loading";
   const canSubmitAvatar = !!updateAccountProfile && !!avatarDraft && avatarStatus !== "loading";
+  const displayAvatar = profile?.avatar ?? avatarDraft ?? DEFAULT_PROFILE_AVATAR;
 
   const handleSectionChange = (section: ProfileSectionId) => {
     setActiveSection(section);
@@ -815,20 +817,9 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     });
   };
 
-  const handleAvatarPresetChange = (preset: OnlineAccountAvatarPreset) => {
-    setAvatarDraft((current) => ({
-      schemaVersion: 1,
-      preset,
-      color: presetAvatarColor(current),
-    }));
-  };
-
-  const handleAvatarColorChange = (color: OnlineAccountAvatarColor) => {
-    setAvatarDraft((current) => ({
-      schemaVersion: 1,
-      preset: presetAvatarPreset(current),
-      color,
-    }));
+  const handlePieceThemePreferenceChange = (theme: PieceTheme) => {
+    setPieceThemePreference(theme);
+    writePreferredPieceTheme(theme);
   };
 
   const handleAvatarUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1071,7 +1062,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       />
 
       <section className="online-profile-hero" aria-label={`${displayName} profile summary`}>
-        {profile && <OnlineProfileAvatar displayName={displayName} avatar={profile.avatar} />}
+        <OnlineProfileAvatar displayName={displayName} avatar={displayAvatar} />
         <div>
           <span className="online-profile-kicker">
             {isSelfDashboard ? "Account summary" : "Shareable profile"}
@@ -1292,44 +1283,40 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                       </label>
                       <p>Images are cropped locally and saved as a small profile picture.</p>
                     </fieldset>
-                    <fieldset>
-                      <legend>Built-in Avatar</legend>
-                      <div className="online-profile-choice-grid">
-                        {AVATAR_PRESET_OPTIONS.map((option) => (
-                          <label key={option.value}>
-                            <input
-                              type="radio"
-                              name="online-profile-avatar-preset"
-                              checked={!isUploadedAvatar(avatarDraft) && avatarDraft.preset === option.value}
-                              onChange={() => handleAvatarPresetChange(option.value)}
-                            />
-                            <span>{option.label} avatar</span>
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
-                    <fieldset>
-                      <legend>Color</legend>
-                      <div className="online-profile-choice-grid compact">
-                        {AVATAR_COLOR_OPTIONS.map((option) => (
-                          <label key={option.value}>
-                            <input
-                              type="radio"
-                              name="online-profile-avatar-color"
-                              checked={!isUploadedAvatar(avatarDraft) && avatarDraft.color === option.value}
-                              onChange={() => handleAvatarColorChange(option.value)}
-                            />
-                            <span>{option.label} avatar color</span>
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
                   </div>
                   <button type="submit" className="online-profile-button" disabled={!canSubmitAvatar}>
                     {avatarStatus === "loading" ? "Saving" : "Save Avatar"}
                   </button>
                 </form>
               )}
+              <div className="online-profile-settings-form online-profile-display-settings">
+                <h3>Display</h3>
+                <label>
+                  <span>Theme</span>
+                  <select
+                    aria-label="Theme preference"
+                    value={themeMode}
+                    onChange={(event) => setThemeMode(event.currentTarget.value as ThemeMode)}
+                  >
+                    {THEME_MODE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Piece set for new games</span>
+                  <select
+                    aria-label="Piece set preference"
+                    value={pieceThemePreference}
+                    onChange={(event) => handlePieceThemePreferenceChange(event.currentTarget.value as PieceTheme)}
+                  >
+                    {PIECE_THEME_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <p>Piece set applies when you create the next Play setup.</p>
+              </div>
               {privacySettings && updateAccountPrivacy && (
                 <form className="online-profile-settings-form" onSubmit={handleSavePrivacy}>
                   <label>

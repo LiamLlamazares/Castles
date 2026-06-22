@@ -3967,6 +3967,106 @@ describe("App game setup lifecycle", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/online/games?"))).toBe(false);
   });
 
+  it("labels the setup handoff back button when a public profile challenge needs setup first", async () => {
+    window.history.replaceState({}, "", "/?profile=Samir");
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_profile_handoff",
+      displayName: "Liam",
+      createdAt: "2026-06-14T12:00:00.000Z",
+      updatedAt: "2026-06-14T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_profile_handoff", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(account),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/challenges?state=all") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+              challenges: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/profiles/Samir") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              profile: {
+                schemaVersion: 1,
+                displayName: "Samir",
+                avatar: APP_TEST_PROFILE_AVATAR,
+                rating: {
+                  schemaVersion: 1,
+                  rating: 1510,
+                  display: "1510",
+                  provisional: false,
+                  games: 18,
+                  updatedAt: "2026-06-14T12:00:00.000Z",
+                },
+                presence: { visibility: "hidden", status: null },
+                relationship: { self: false, following: false, followedBy: false, blocked: false },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (
+        path === "/api/online/profiles/Samir/games?state=archived&limit=8" ||
+        path === "/api/online/profiles/Samir/games?state=active&limit=3"
+      ) {
+        expect(init?.headers).toBeUndefined();
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/profiles/Samir/ratings/history?limit=20") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: 1,
+              points: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Challenge Samir" }));
+
+    expect(await screen.findByText("Setup Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to game" })).not.toBeInTheDocument();
+  });
+
   it("polls signed-in account challenges into count-only People navigation activity", async () => {
     const account = {
       schemaVersion: 1 as const,

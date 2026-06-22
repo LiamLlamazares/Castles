@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import OnlineProfileDashboard from "../OnlineProfileDashboard";
+import { ThemeProvider } from "../../contexts/ThemeContext";
 import { OnlineRequestError } from "../../online/client";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
 import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../online/readModel";
@@ -82,6 +83,7 @@ function unrelatedPublicGame(overrides: Partial<OnlineGameSummary> = {}): Online
 describe("OnlineProfileDashboard", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
   });
 
   it("loads a signed-in self dashboard with empty account states and sanitized controls", async () => {
@@ -238,12 +240,12 @@ describe("OnlineProfileDashboard", () => {
     }));
   });
 
-  it("lets signed-in players choose a built-in avatar from Profile Settings", async () => {
+  it("keeps profile picture upload but removes built-in avatar chooser clutter", async () => {
     const liam = account("Liam");
     const updateAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: profile("Liam", {
-        avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         relationship: { self: true, following: false, followedBy: false, blocked: false },
       }),
     });
@@ -265,15 +267,13 @@ describe("OnlineProfileDashboard", () => {
 
     expect(await screen.findByRole("img", { name: "Liam profile avatar, monarch on green" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Dragon avatar" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Violet avatar color" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Avatar" }));
 
-    await waitFor(() => expect(updateAccountProfile).toHaveBeenCalledWith({
-      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
-    }));
-    expect(await screen.findByText("Avatar saved.")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Liam profile avatar, dragon on violet" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Upload PNG, JPEG, or WebP")).toHaveAttribute("type", "file");
+    expect(screen.queryByRole("group", { name: "Built-in Avatar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Color" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Dragon avatar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Violet avatar color" })).not.toBeInTheDocument();
+    expect(updateAccountProfile).not.toHaveBeenCalled();
   });
 
   it("renders uploaded profile pictures and keeps the upload control in Profile Settings", async () => {
@@ -296,7 +296,34 @@ describe("OnlineProfileDashboard", () => {
     expect(avatar.querySelector("img")).toHaveAttribute("src", TINY_AVATAR_DATA_URL);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByLabelText("Upload PNG, JPEG, or WebP")).toHaveAttribute("type", "file");
-    expect(screen.getByRole("radio", { name: "Monarch avatar" })).not.toBeChecked();
+    expect(screen.queryByRole("radio", { name: "Monarch avatar" })).not.toBeInTheDocument();
+  });
+
+  it("exposes theme mode and piece-set preferences in Profile Settings", async () => {
+    render(
+      <ThemeProvider>
+        <OnlineProfileDashboard
+          displayName="Liam"
+          account={account("Liam")}
+          loadProfile={vi.fn().mockResolvedValue({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            profile: profile("Liam", {
+              relationship: { self: true, following: false, followedBy: false, blocked: false },
+            }),
+          })}
+        />
+      </ThemeProvider>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.change(screen.getByLabelText("Theme preference"), { target: { value: "system" } });
+    fireEvent.change(screen.getByLabelText("Piece set preference"), { target: { value: "Chess" } });
+
+    expect(document.documentElement).toHaveAttribute("data-theme");
+    expect(window.localStorage.getItem("castles-theme")).toBe("system");
+    expect(window.localStorage.getItem("castles-piece-theme")).toBe("Chess");
+    expect(screen.getByText("Piece set applies when you create the next Play setup.")).toBeInTheDocument();
   });
 
   it("signs out all account sessions from Profile Settings", async () => {

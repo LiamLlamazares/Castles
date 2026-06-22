@@ -10,6 +10,10 @@ vi.mock("../../Classes/Services/AssetRegistry", () => ({
 }));
 
 describe("GameSetup", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -83,6 +87,17 @@ describe("GameSetup", () => {
     expect(onCreateOpenSeek.mock.calls[0][9]).toBe("rated");
   });
 
+  it("uses the saved piece-set preference for new setup actions", () => {
+    window.localStorage.setItem("castles-piece-theme", "Chess");
+    const onPlay = vi.fn();
+    render(<GameSetup onPlay={onPlay} />);
+
+    expect(screen.getByDisplayValue("Chess")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
+
+    expect(onPlay.mock.calls[0][8]).toBe("Chess");
+  });
+
   it("passes the preview setup through when creating an invite challenge", () => {
     const previewSanctuaries = [
       new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
@@ -135,6 +150,7 @@ describe("GameSetup", () => {
     const onTutorial = vi.fn();
     const onOpenLibrary = vi.fn();
     const onOpenOnlineBrowser = vi.fn();
+    const onOpenPeople = vi.fn();
     const onOpenProfile = vi.fn();
 
     render(
@@ -145,6 +161,7 @@ describe("GameSetup", () => {
         onTutorial={onTutorial}
         onOpenLibrary={onOpenLibrary}
         onOpenOnlineBrowser={onOpenOnlineBrowser}
+        onOpenPeople={onOpenPeople}
         onOpenProfile={onOpenProfile}
       />
     );
@@ -153,12 +170,13 @@ describe("GameSetup", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "People", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
     fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
     fireEvent.click(screen.getByRole("button", { name: "Profile" }));
+    fireEvent.click(screen.getByRole("button", { name: "People" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
@@ -169,6 +187,7 @@ describe("GameSetup", () => {
     expect(onBack).toHaveBeenCalledOnce();
     expect(onTutorial).toHaveBeenCalledOnce();
     expect(onOpenProfile).toHaveBeenCalledOnce();
+    expect(onOpenPeople).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledOnce();
     expect(onOpenOnlineBrowser).toHaveBeenCalledOnce();
   });

@@ -14,6 +14,7 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
     onNewGame: vi.fn(),
       onOpenLibrary: vi.fn(),
       onOpenOnlineBrowser: vi.fn(),
+      onOpenPeople: vi.fn(),
       onOpenProfile: vi.fn(),
       onSaveGameToLibrary: vi.fn(),
       onTutorial: vi.fn(),
@@ -39,6 +40,7 @@ const menuProps = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu>
   onNewGame: vi.fn(),
   onOpenLibrary: vi.fn(),
   onOpenOnlineBrowser: vi.fn(),
+  onOpenPeople: vi.fn(),
   onOpenProfile: vi.fn(),
   onSaveGameToLibrary: vi.fn(),
   onTutorial: vi.fn(),
@@ -58,11 +60,13 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Save to Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "Configure New Game" }));
     expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
+    expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "People" }));
     expect(screen.getByRole("region", { name: "Profile" })).toContainElement(screen.getByRole("button", { name: "Profile" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Tutorial" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
@@ -96,7 +100,7 @@ describe("HamburgerMenu", () => {
     ]);
   });
 
-  it("shows count-only online challenge activity in the drawer", () => {
+  it("shows count-only challenge activity on People in the drawer", () => {
     renderMenu({
       onlineNotificationCount: 2,
       onlineNotificationLabel: "challenge activities",
@@ -104,11 +108,15 @@ describe("HamburgerMenu", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
-    const onlineButton = screen.getByRole("button", { name: "Online Lobby, 2 challenge activities" });
+    const onlineButton = screen.getByRole("button", { name: "Online Lobby" });
+    const peopleButton = screen.getByRole("button", { name: "People, 2 challenge activities" });
 
     expect(onlineButton).toHaveTextContent("Online Lobby");
-    expect(onlineButton.querySelector(".menu-item-badge")).toHaveTextContent("2");
+    expect(onlineButton.querySelector(".menu-item-badge")).not.toBeInTheDocument();
+    expect(peopleButton).toHaveTextContent("People");
+    expect(peopleButton.querySelector(".menu-item-badge")).toHaveTextContent("2");
     expect(onlineButton).not.toHaveTextContent("Samir");
+    expect(peopleButton).not.toHaveTextContent("Samir");
   });
 
   it("keeps save, learning, and secondary tools in their intended sections", () => {
@@ -177,8 +185,8 @@ describe("HamburgerMenu", () => {
       .filter(Boolean);
     expect(iconText).toEqual([]);
     expect(container.querySelectorAll(".menu-item-marker")).toHaveLength(0);
-    expect(container.querySelectorAll(".menu-item-icon-frame")).toHaveLength(14);
-    expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(14);
+    expect(container.querySelectorAll(".menu-item-icon-frame")).toHaveLength(15);
+    expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(15);
     for (const icon of Array.from(container.querySelectorAll<HTMLElement>(".menu-item-icon"))) {
       expect(icon.tagName.toLowerCase()).toBe("img");
       expect(icon).toHaveAttribute("alt", "");

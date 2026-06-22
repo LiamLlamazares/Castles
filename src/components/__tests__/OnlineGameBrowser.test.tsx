@@ -2545,7 +2545,14 @@ describe("OnlineGameBrowser", () => {
 
   it("lets signed-in players act on account challenges from the inbox", async () => {
     const account = accountFixture("Liam");
-    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const pendingSummary = accountChallengeSummary({
+      challengedIdentity: account.identity,
+      setup: {
+        ...createChallengeSetup(),
+        pieceTheme: "Chess",
+        sanctuarySettings: { unlockTurn: 0, cooldown: 10 },
+      },
+    });
     const acceptedSummary = {
       ...pendingSummary,
       updatedAt: "2026-06-03T12:02:00.000Z",
@@ -2605,6 +2612,8 @@ describe("OnlineGameBrowser", () => {
     expect(article as HTMLElement).toHaveTextContent("Clock Timed 20+20");
     expect(article as HTMLElement).toHaveTextContent("Scoring Victory points");
     expect(article as HTMLElement).toHaveTextContent("Rating Casual");
+    expect(article as HTMLElement).toHaveTextContent("Piece Set Chess");
+    expect(article as HTMLElement).toHaveTextContent("Pledge cooldown 10");
 
     const acceptButton = within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" });
     expect(acceptButton).toHaveTextContent("Accept & Join");
@@ -4779,6 +4788,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
     expect(row).toHaveTextContent("Scoring Victory points");
+    expect(row).toHaveTextContent("Piece Set Castles");
     expect(within(row).getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeInTheDocument();
     const currentGames = screen.getByRole("region", { name: "Current public games" });
     const liveOverview = within(currentGames).getByRole("group", { name: "Lobby live games overview" });

@@ -50,6 +50,7 @@ import {
 } from "../online/readModel";
 import type { OnlineIdentity } from "../online/identity";
 import type { OnlineJoinParams } from "../online/client";
+import type { OnlineGameSetupDTO } from "../online/types";
 import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
@@ -121,6 +122,10 @@ interface QuickMatchSetupSummary {
   clock: string;
   scoring: string;
   rating: string;
+  pieceSet?: string;
+  sanctuaryCount?: number;
+  poolCount?: number;
+  pledgeCooldown?: number;
 }
 
 const LOBBY_AUTO_REFRESH_MS = 30_000;
@@ -632,14 +637,7 @@ function formatChallengeSeatChoice(
 }
 
 function formatChallengeSetupSummary(item: OnlineAccountChallengeListItem): string[] {
-  const setup = item.summary.setup;
-  const clock = setup.timeControl ? `Timed ${setup.timeControl.initial}+${setup.timeControl.increment}` : "Casual";
-  return [
-    `Board Radius ${setup.board.config.nSquares}`,
-    `Clock ${clock}`,
-    `Scoring ${setup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control"}`,
-    `Rating ${formatRatingModeLabel(setup.ratingMode)}`,
-  ];
+  return formatOnlineSetupDetails(item.summary.setup);
 }
 
 function formatAccountChallengeStatus(item: OnlineAccountChallengeListItem): string {
@@ -954,6 +952,27 @@ function formatRatingModeLabel(ratingMode: "casual" | "rated" | undefined): stri
 
 function formatSeekRatingLabel(summary: OpenSeekSummary): string {
   return formatRatingModeLabel(summary.setup.ratingMode);
+}
+
+function formatOnlineSetupDetails(setup: OnlineGameSetupDTO): string[] {
+  const clock = setup.timeControl ? `Clock Timed ${setup.timeControl.initial}+${setup.timeControl.increment}` : "Clock Casual";
+  const details = [
+    `Board Radius ${setup.board.config.nSquares}`,
+    clock,
+    `Scoring ${setup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control"}`,
+    `Rating ${formatRatingModeLabel(setup.ratingMode)}`,
+    `Piece Set ${setup.pieceTheme ?? "Castles"}`,
+  ];
+  if (setup.sanctuaries.length > 0) {
+    details.push(`Sanctuaries ${setup.sanctuaries.length}`);
+  }
+  if (setup.initialPoolTypes?.length) {
+    details.push(`Pool ${setup.initialPoolTypes.length} types`);
+  }
+  if (setup.sanctuarySettings) {
+    details.push(`Pledge cooldown ${setup.sanctuarySettings.cooldown}`);
+  }
+  return details;
 }
 
 function matchesSeekRatingFilter(summary: OpenSeekSummary, ratingFilter: OnlineBrowserRatingFilter): boolean {
@@ -5364,6 +5383,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <span>{quickMatchSetupSummary.clock}</span>
                   <span>{quickMatchSetupSummary.scoring}</span>
                   <span>{quickMatchSetupSummary.rating}</span>
+                  {quickMatchSetupSummary.pieceSet && <span>{quickMatchSetupSummary.pieceSet}</span>}
+                  {quickMatchSetupSummary.sanctuaryCount ? (
+                    <span>{quickMatchSetupSummary.sanctuaryCount} sanctuaries</span>
+                  ) : null}
+                  {quickMatchSetupSummary.poolCount ? (
+                    <span>{quickMatchSetupSummary.poolCount} pool types</span>
+                  ) : null}
+                  {quickMatchSetupSummary.pledgeCooldown !== undefined && (
+                    <span>Cooldown {quickMatchSetupSummary.pledgeCooldown}</span>
+                  )}
                 </div>
               )}
               <div className="online-browser-quick-match-actions">
@@ -5562,7 +5591,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 visibleOpenSeeks.map((seek) => {
                   const owned = ownedSeekIds.includes(seek.seekId);
                   const pendingAction = seekActionById[seek.seekId];
-                  const radius = seek.setup.board.config.nSquares;
                   const creatorDisplayName = identityDisplayName(seek.creatorIdentity);
                   return (
                     <article
@@ -5607,10 +5635,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           ) : null}
                           <span>{creatorDisplayName ? `Creator ${creatorDisplayName}` : "Creator unregistered"}</span>
                           <span>{formatSeekSideDetail(seek, owned)}</span>
-                          <span>Board Radius {radius}</span>
-                          <span>Clock {formatSeekClock(seek)}</span>
-                          <span>Scoring {formatSeekScoringLabel(seek)}</span>
-                          <span>Rating {formatSeekRatingLabel(seek)}</span>
+                          {formatOnlineSetupDetails(seek.setup).map((detail) => (
+                            <span key={detail}>{detail}</span>
+                          ))}
                           <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
                         </div>
                       </div>

@@ -28,6 +28,7 @@ interface HamburgerMenuProps {
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenPeople?: () => void;
   onOpenProfile?: () => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
@@ -60,6 +61,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onSaveGameToLibrary,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onOpenPeople,
   onOpenProfile,
   onlineNotificationCount = 0,
   onlineNotificationLabel = "notifications",
@@ -97,11 +99,12 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     typeof onlineNotificationCount === "number" && Number.isFinite(onlineNotificationCount)
       ? Math.max(0, Math.floor(onlineNotificationCount))
       : 0;
-  const onlineLobbyLabel =
+  const onlineLobbyLabel = "Online Lobby";
+  const peopleLabel =
     normalizedOnlineNotificationCount > 0
-      ? `Online Lobby, ${normalizedOnlineNotificationCount} ${onlineNotificationLabel}`
-      : "Online Lobby";
-  const onlineLobbyBadge =
+      ? `People, ${normalizedOnlineNotificationCount} ${onlineNotificationLabel}`
+      : "People";
+  const peopleBadge =
     normalizedOnlineNotificationCount > 99 ? "99+" : String(normalizedOnlineNotificationCount);
 
   const hideMenuButtonForModal = React.useCallback(() => {
@@ -385,24 +388,37 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               </button>
             </section>
 
-            {onOpenOnlineBrowser && (
+            {(onOpenOnlineBrowser || onOpenPeople) && (
               <section className="menu-section" aria-labelledby="menu-section-online">
                 <div id="menu-section-online" className="menu-section-label">Online</div>
-                <p className="menu-section-note">Lobby, live games, archive</p>
-                <button
-                  className="menu-item"
-                  onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
-                  aria-label={onlineLobbyLabel}
-                  title={onlineLobbyLabel}
-                >
-                  {renderImageIcon(castleIcon)}
-                  <span>Online Lobby</span>
-                  {normalizedOnlineNotificationCount > 0 && (
-                    <span className="menu-item-badge" aria-hidden="true">
-                      {onlineLobbyBadge}
-                    </span>
-                  )}
-                </button>
+                <p className="menu-section-note">Lobby, people, archive</p>
+                {onOpenOnlineBrowser && (
+                  <button
+                    className="menu-item"
+                    onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
+                    aria-label={onlineLobbyLabel}
+                    title={onlineLobbyLabel}
+                  >
+                    {renderImageIcon(castleIcon)}
+                    <span>Online Lobby</span>
+                  </button>
+                )}
+                {onOpenPeople && (
+                  <button
+                    className="menu-item"
+                    onClick={() => handleMenuItemClick(onOpenPeople)}
+                    aria-label={peopleLabel}
+                    title={peopleLabel}
+                  >
+                    {renderImageIcon(crownIcon)}
+                    <span>People</span>
+                    {normalizedOnlineNotificationCount > 0 && (
+                      <span className="menu-item-badge" aria-hidden="true">
+                        {peopleBadge}
+                      </span>
+                    )}
+                  </button>
+                )}
               </section>
             )}
 

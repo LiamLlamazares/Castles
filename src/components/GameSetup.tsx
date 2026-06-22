@@ -15,6 +15,7 @@ import { getImageByPieceType } from './PieceImages';
 import { controlGroupStyle, labelStyle } from '../css/styles';
 import { ModeSelector, TimeControls, SanctuarySelector, BoardConfig, GameRulesSection, type GameMode } from './Setup';
 import AppShellNav, { AppShellDestination } from './AppShellNav';
+import { readPreferredPieceTheme, writePreferredPieceTheme } from '../preferences/displayPreferences';
 import { Palette, Colors } from '../Theme';
 import '../css/Board.css';
 import type { OnlineRatingMode } from '../online/types';
@@ -62,6 +63,7 @@ interface GameSetupProps {
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
     onOpenOnlineBrowser?: () => void;
+    onOpenPeople?: () => void;
     onOpenProfile?: () => void;
     onlineNotificationCount?: number;
     onlineNotificationLabel?: string;
@@ -134,6 +136,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     onTutorial,
     onOpenLibrary,
     onOpenOnlineBrowser,
+    onOpenPeople,
     onOpenProfile,
     onlineNotificationCount = 0,
     onlineNotificationLabel
@@ -172,7 +175,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     const [ratingMode, setRatingMode] = useState<OnlineRatingMode>('casual');
     
     // Piece Theme Selection - Default to Castles
-    const [pieceTheme, setPieceTheme] = useState<PieceTheme>("Castles");
+    const [pieceTheme, setPieceTheme] = useState<PieceTheme>(() => readPreferredPieceTheme());
     
     // Opponent Selection - Default to Human (local 2-player)
     const [opponentType, setOpponentType] = useState<OpponentType>('human');
@@ -329,6 +332,11 @@ const GameSetup: React.FC<GameSetupProps> = ({
         );
     };
 
+    const handlePieceThemeChange = (theme: PieceTheme) => {
+        setPieceTheme(theme);
+        writePreferredPieceTheme(theme);
+    };
+
     const navDestinations: AppShellDestination[] = [
         { id: "play", label: "Play" },
         ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
@@ -340,6 +348,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
             notificationSingularLabel: "challenge activity",
             notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
         }] : []),
+        ...(onOpenPeople ? [{ id: "people" as const, label: "People", onClick: onOpenPeople }] : []),
         ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
         ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ];
@@ -517,7 +526,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     onRandomCastlesChange={setUseRandomCastles}
                     onReroll={() => setRerollKey(k => k + 1)}
                     pieceTheme={pieceTheme}
-                    onPieceThemeChange={setPieceTheme}
+                    onPieceThemeChange={handlePieceThemeChange}
                     sanctuaryCooldown={sanctuaryCooldown}
                     onSanctuaryCooldownChange={setSanctuaryCooldown}
                 />
