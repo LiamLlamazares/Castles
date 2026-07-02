@@ -128,10 +128,7 @@ export interface OnlineAccountChallengeDirectoryResponse {
 export function countOnlineAccountChallengeNavigationActivity(
   challenges: OnlineAccountChallengeListItem[]
 ): number {
-  return challenges.filter((item) =>
-    (item.role === "challenged" && item.summary.status === "pending") ||
-    (item.summary.status === "accepted" && Boolean(item.summary.gameId))
-  ).length;
+  return challenges.filter((item) => item.role === "challenged" && item.summary.status === "pending").length;
 }
 
 const MAX_ID_LENGTH = 128;

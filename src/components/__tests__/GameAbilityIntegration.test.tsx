@@ -1186,7 +1186,7 @@ describe("Game ability integration", () => {
     expect(liveMove).not.toHaveAttribute("aria-current");
   });
 
-  test("online sparse analysis handoff avoids broken historical navigation", () => {
+  test("online sparse analysis handoff hydrates historical navigation", () => {
     const onLoadGame = vi.fn();
     const moveTree = new MoveTree();
     moveTree.addMove(moveRecord("H12H11", 1));
@@ -1218,8 +1218,52 @@ describe("Game ability integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Analysis" }));
 
     const analysisTree = onLoadGame.mock.calls[0][0].moveTree as MoveTree;
-    expect(analysisTree.rootNode.children).toHaveLength(0);
-    expect(analysisTree.rootNode.snapshot?.turnCounter).toBe(1);
+    expect(analysisTree.rootNode.children).toHaveLength(1);
+    expect(analysisTree.rootNode.children[0].snapshot).toBeDefined();
+    expect(analysisTree.rootNode.snapshot?.turnCounter).toBe(0);
+  });
+
+  test("analysis mode displays saved replay clock for the selected move", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          isAnalysisMode
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          analysisClockHistory={[
+            {
+              moveIndex: 0,
+              clock: {
+                timeControl: { initialMs: 60_000, incrementMs: 0 },
+                remainingMs: { w: 60_000, b: 60_000 },
+                activeColor: "w",
+                runningSince: 1_000,
+                serverNow: 1_000,
+              },
+            },
+            {
+              moveIndex: 2,
+              clock: {
+                timeControl: { initialMs: 60_000, incrementMs: 0 },
+                remainingMs: { w: 59_000, b: 60_000 },
+                activeColor: "w",
+                runningSince: 2_000,
+                serverNow: 2_000,
+              },
+            },
+          ]}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByTestId("online-clock-w")).toHaveTextContent("0:59");
+    expect(screen.getByTestId("online-clock-b")).toHaveTextContent("1:00");
   });
 
   test("online session badges use readable state labels", () => {

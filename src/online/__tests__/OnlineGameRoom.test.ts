@@ -273,6 +273,39 @@ describe("OnlineGameRoom", () => {
     });
   });
 
+  it("includes frozen replay clock history for analysis positions", () => {
+    let now = 1_000;
+    const room = createRoom({
+      now: () => now,
+      timeControl: { initial: 1, increment: 2 },
+    });
+
+    expect(room.getSnapshot().clockHistory).toEqual([
+      {
+        moveIndex: 0,
+        clock: {
+          timeControl: { initialMs: 60_000, incrementMs: 2_000 },
+          remainingMs: { w: 60_000, b: 60_000 },
+          activeColor: "w",
+          runningSince: 1_000,
+          serverNow: 1_000,
+        },
+      },
+    ]);
+
+    now = 11_000;
+    const result = room.submitAction("white-token", {
+      type: "PASS",
+      baseVersion: 0,
+    }, "client-action-clock-history");
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.clockHistory?.at(-1)).toEqual({
+      moveIndex: 1,
+      clock: result.snapshot.clock,
+    });
+  });
+
   it("deducts elapsed server time and applies increment when the active color changes", () => {
     let now = 1_000;
     const room = createRoom({

@@ -128,7 +128,9 @@ interface QuickMatchSetupSummary {
   pledgeCooldown?: number;
 }
 
-const LOBBY_AUTO_REFRESH_MS = 30_000;
+const PUBLIC_GAME_AUTO_REFRESH_MS = 30_000;
+const LOBBY_AUTO_REFRESH_MS = 1_000;
+const WATCH_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
 const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
 const ACCOUNT_CHALLENGE_EXPIRING_SOON_MS = 5 * 60 * 1000;
@@ -205,7 +207,6 @@ interface OnlineGameBrowserProps {
   onUnblockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onReportAccount?: (displayName: string, input: OnlineAccountReportInput) => Promise<OnlineAccountReportResponse>;
   onChallengeAccount?: (displayName: string, options?: OnlineAccountChallengeActionOptions) => void | Promise<void>;
-  onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -1103,7 +1104,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onUnblockAccount,
   onReportAccount,
   onChallengeAccount,
-  onCopyChallengeAccountInvite,
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -1170,7 +1170,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [socialSearchResults, setSocialSearchResults] = React.useState<OnlineAccountSearchProfile[]>([]);
   const [socialSearchStatus, setSocialSearchStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [socialMessage, setSocialMessage] = React.useState("");
-  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "report" | undefined>();
+  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "refresh" | "report" | undefined>();
   const [reportTargetDisplayName, setReportTargetDisplayName] = React.useState("");
   const [reportReason, setReportReason] = React.useState<OnlineAccountReportReason>("abuse");
   const [reportDetails, setReportDetails] = React.useState("");
@@ -1829,7 +1829,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (document.visibilityState !== "visible") return;
       void loadPage("replace", undefined, { background: true });
     };
-    const interval = window.setInterval(refreshLiveGamesIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const interval = window.setInterval(refreshLiveGamesIfVisible, PUBLIC_GAME_AUTO_REFRESH_MS);
     const handleVisibilityChange = () => {
       refreshLiveGamesIfVisible();
     };
@@ -1846,7 +1846,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (document.visibilityState !== "visible") return;
       void loadPage("replace", undefined, { background: true });
     };
-    const interval = window.setInterval(refreshWatchIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const interval = window.setInterval(refreshWatchIfVisible, WATCH_AUTO_REFRESH_MS);
     const handleVisibilityChange = () => {
       refreshWatchIfVisible();
     };
@@ -3752,27 +3752,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, onChallengeAccount]);
 
-  const runSocialCopyChallengeInviteAction = React.useCallback(async (displayName: string) => {
-    if (!onCopyChallengeAccountInvite) return;
-    const requestId = ++socialMutationRequestIdRef.current;
-    const accountId = account?.accountId;
-    setSocialAction("copy-invite");
-    setSocialMessage("");
-    try {
-      await onCopyChallengeAccountInvite(displayName);
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      setSocialMessage(`Challenge invite copied for ${displayName}.`);
-    } catch (error) {
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      console.error("[OnlineGameBrowser] Failed to copy account challenge invite", error);
-      setSocialMessage(onlineRequestErrorMessage(error) ?? `Could not copy a challenge invite for ${displayName}.`);
-    } finally {
-      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
-        setSocialAction(undefined);
-      }
-    }
-  }, [account?.accountId, onCopyChallengeAccountInvite]);
-
   const selectSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile, message = `Selected ${profile.displayName}.`) => {
     setSocialLookupName(profile.displayName);
     setSocialProfile(profile);
@@ -4216,7 +4195,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ) : ratingLeaderboardStatus === "loading" && ratingLeaderboardEntries.length === 0 ? (
                 <p>Loading rating leaders...</p>
               ) : ratingLeaderboardEntries.length === 0 ? (
-                <p>{ratingLeaderboardScope === "following" ? "No followed players have rated games yet." : "No rated games yet."}</p>
+                <p>
+                  {ratingLeaderboardScope === "following"
+                    ? "No followed players have rated leaderboard entries yet. Accounts appear here after a completed rated game between signed-in players."
+                    : "No rated leaderboard entries yet. Accounts appear here after a completed rated game between signed-in players."}
+                </p>
               ) : (
                 <>
                   <p className="online-browser-rating-policy-note">{RATING_LEADERBOARD_POLICY_COPY}</p>
@@ -4346,17 +4329,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             aria-label={`Challenge ${profile.displayName} from online now`}
                           >
                             Challenge
-                          </button>
-                        )}
-                        {!accountChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
-                          <button
-                            type="button"
-                            className="online-browser-button subtle"
-                            onClick={() => void runSocialCopyChallengeInviteAction(profile.displayName)}
-                            disabled={socialAction !== undefined}
-                            aria-label={`Copy challenge invite for ${profile.displayName} from online now`}
-                          >
-                            Copy Invite
                           </button>
                         )}
                         {canInteractWithProfile && (
@@ -4700,17 +4672,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           Rematch
                         </button>
                       )}
-                      {!socialProfileAccountChallenge && onCopyChallengeAccountInvite && (
-                        <button
-                          type="button"
-                          className="online-browser-button subtle"
-                          onClick={() => void runSocialCopyChallengeInviteAction(socialProfile.displayName)}
-                          disabled={socialAction !== undefined}
-                          aria-label={`Copy challenge invite for ${socialProfile.displayName}`}
-                        >
-                          {socialAction === "copy-invite" ? "Copying" : "Copy Invite"}
-                        </button>
-                      )}
                       <button
                         type="button"
                         className="online-browser-button subtle"
@@ -4996,17 +4957,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             aria-label={`Rematch ${profile.displayName} from latest head-to-head game ${latestHeadToHeadRematchGame.gameId}`}
                           >
                             Rematch
-                          </button>
-                        )}
-                        {!accountChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
-                          <button
-                            type="button"
-                            className="online-browser-button subtle"
-                            onClick={() => void runSocialCopyChallengeInviteAction(profile.displayName)}
-                            disabled={socialAction !== undefined}
-                            aria-label={`Copy challenge invite for ${profile.displayName}`}
-                          >
-                            {socialAction === "copy-invite" ? "Copying" : "Copy Invite"}
                           </button>
                         )}
                         {canInteractWithProfile && (

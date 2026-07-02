@@ -4,10 +4,15 @@ import { ThemeProvider } from "../../contexts/ThemeContext";
 import { OnlineRequestError } from "../../online/client";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
 import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../online/readModel";
-import { ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION } from "../../online/challenges";
+import {
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+  type OnlineAccountChallengeListItem,
+} from "../../online/challenges";
 import type { OnlineAccount } from "../../online/accounts";
 import type { OnlineAccountPublicProfile } from "../../online/social";
 import type { OnlineGameSummary } from "../../online/readModel";
+import type { OnlineGameSetupDTO } from "../../online/types";
 
 const TINY_AVATAR_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
@@ -78,6 +83,43 @@ function unrelatedPublicGame(overrides: Partial<OnlineGameSummary> = {}): Online
     ],
     ...overrides,
   });
+}
+
+function accountChallengeRecord(
+  overrides: Partial<OnlineAccountChallengeListItem["summary"]> & {
+    role?: OnlineAccountChallengeListItem["role"];
+    challenger?: string;
+    challenged?: string;
+  } = {}
+): OnlineAccountChallengeListItem {
+  const challenger = overrides.challenger ?? "Liam";
+  const challenged = overrides.challenged ?? "Pablo";
+  return {
+    role: overrides.role ?? "challenger",
+    summary: {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_profile_pablo",
+      challengerIdentity: {
+        kind: "registered",
+        id: `account_${challenger.toLowerCase()}`,
+        displayName: challenger,
+      },
+      challengedIdentity: {
+        kind: "registered",
+        id: `account_${challenged.toLowerCase()}`,
+        displayName: challenged,
+      },
+      challengerSeat: "random",
+      visibility: "private",
+      setup: {} as OnlineGameSetupDTO,
+      createdAt: "2026-07-01T10:15:00.000Z",
+      updatedAt: "2026-07-01T10:15:00.000Z",
+      expiresAt: "2026-07-02T10:15:00.000Z",
+      status: "pending",
+      lastEventId: "evt_profile_challenge",
+      ...overrides,
+    },
+  };
 }
 
 describe("OnlineProfileDashboard", () => {
@@ -187,7 +229,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByRole("button", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByText("No account games yet. Signed-in games will appear here for review.")).toBeInTheDocument();
-    expect(screen.getByText("0 challenges visible to this account.")).toBeInTheDocument();
+    expect(screen.getByText("No challenge records.")).toBeInTheDocument();
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();
     expect(container.querySelector(".online-profile-rating-chart polyline")).toBeInTheDocument();
@@ -238,6 +280,69 @@ describe("OnlineProfileDashboard", () => {
     await waitFor(() => expect(updateAccountPassword).toHaveBeenLastCalledWith({
       newPassword: "first-local-password",
     }));
+  });
+
+  it("shows self challenge records with opponent, status, and timestamps", async () => {
+    const cancelledRecord = accountChallengeRecord({
+      status: "cancelled",
+      updatedAt: "2026-07-01T10:18:00.000Z",
+      cancelledAt: "2026-07-01T10:18:00.000Z",
+      cancelledBy: {
+        kind: "registered",
+        id: "account_liam",
+        displayName: "Liam",
+      },
+    });
+    const onCancelAccountChallenge = vi.fn().mockResolvedValue({
+      role: "challenger",
+      summary: cancelledRecord.summary,
+    });
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Liam", {
+            relationship: { self: true, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        loadAccountChallenges={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+          challenges: [
+            accountChallengeRecord(),
+            accountChallengeRecord({
+              role: "challenged",
+              challengeId: "challenge_profile_ada",
+              challenger: "Ada",
+              challenged: "Liam",
+              status: "accepted",
+              createdAt: "2026-07-01T11:20:00.000Z",
+              expiresAt: "2026-07-02T11:20:00.000Z",
+              gameId: "game_accepted_ada",
+            }),
+          ],
+        })}
+        onCancelAccountChallenge={onCancelAccountChallenge}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
+    expect(await screen.findByText("2 challenge records visible to this account.")).toBeInTheDocument();
+    expect(screen.getByText("To Pablo")).toBeInTheDocument();
+    expect(screen.getByText("From Ada")).toBeInTheDocument();
+    expect(screen.getByText("pending")).toBeInTheDocument();
+    expect(screen.getByText("accepted")).toBeInTheDocument();
+    expect(screen.getByText("Created 2026-07-01 10:15 UTC")).toBeInTheDocument();
+    expect(screen.getByText("Expires 2026-07-02 11:20 UTC")).toBeInTheDocument();
+    expect(screen.getByText("Game game_accepted_ada")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel challenge to Pablo" }));
+    await waitFor(() => expect(onCancelAccountChallenge).toHaveBeenCalledWith("challenge_profile_pablo"));
+    expect(await screen.findByText("Challenge to Pablo cancelled.")).toBeInTheDocument();
+    expect(screen.getByText("cancelled")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel challenge to Pablo" })).not.toBeInTheDocument();
   });
 
   it("keeps profile picture upload but removes built-in avatar chooser clutter", async () => {

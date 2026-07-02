@@ -3,6 +3,7 @@ import type {
   OnlineClockStateDTO,
   OnlineGameResultDTO,
   OnlineGameSnapshotDTO,
+  OnlineReplayClockPointDTO,
   OnlineReject,
   OnlineRejectCode,
 } from "./types";
@@ -197,6 +198,30 @@ function validateClock(value: unknown): ValidationResult<OnlineClockStateDTO> {
   };
 }
 
+function validateClockHistory(value: unknown): ValidationResult<OnlineReplayClockPointDTO[]> {
+  if (!Array.isArray(value)) return bad("message.snapshot.clockHistory must be an array.");
+  if (value.length > MAX_MOVE_HISTORY + 1) return bad("message.snapshot.clockHistory is too long.");
+
+  const history: OnlineReplayClockPointDTO[] = [];
+  let previousMoveIndex = -1;
+  for (let index = 0; index < value.length; index++) {
+    const point = value[index];
+    if (!isRecord(point)) return bad(`message.snapshot.clockHistory[${index}] must be an object.`);
+    if (!isNonNegativeSafeInteger(point.moveIndex)) {
+      return bad(`message.snapshot.clockHistory[${index}].moveIndex must be a non-negative integer.`);
+    }
+    if (point.moveIndex < previousMoveIndex) {
+      return bad("message.snapshot.clockHistory must be sorted by moveIndex.");
+    }
+    const clock = validateClock(point.clock);
+    if (!clock.ok) return clock;
+    history.push({ moveIndex: point.moveIndex, clock: clock.value });
+    previousMoveIndex = point.moveIndex;
+  }
+
+  return { ok: true, value: history };
+}
+
 function validateSnapshot(value: unknown): ValidationResult<OnlineGameSnapshotDTO> {
   if (!isRecord(value)) return bad("message.snapshot must be an object.");
   const gameId = validateOnlineGameId(value.gameId, "message.snapshot.gameId");
@@ -229,6 +254,13 @@ function validateSnapshot(value: unknown): ValidationResult<OnlineGameSnapshotDT
     clock = clockValidation.value;
   }
 
+  let clockHistory: OnlineReplayClockPointDTO[] | undefined;
+  if (value.clockHistory !== undefined) {
+    const clockHistoryValidation = validateClockHistory(value.clockHistory);
+    if (!clockHistoryValidation.ok) return clockHistoryValidation;
+    clockHistory = clockHistoryValidation.value;
+  }
+
   return {
     ok: true,
     value: {
@@ -241,6 +273,7 @@ function validateSnapshot(value: unknown): ValidationResult<OnlineGameSnapshotDT
       turnPhase: value.turnPhase as TurnPhase,
       result,
       clock,
+      clockHistory,
     },
   };
 }

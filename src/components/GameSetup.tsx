@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import HexGrid from './HexGrid';
 import { PieceTooltip } from './PieceTooltip';
 import { getStartingPieces, getStartingBoard, getStartingLayout } from '../ConstantImports';
@@ -119,6 +119,109 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
+const SETUP_STORAGE_KEY = "castles_play_setup_v1";
+
+interface PersistedGameSetup {
+    schemaVersion: 1;
+    selectedMode: GameMode;
+    boardRadius: number;
+    useRandomCastles: boolean;
+    timeInitial: number;
+    timeIncrement: number;
+    selectedSanctuaries: SanctuaryType[];
+    sanctuaryUnlockTurn: number;
+    sanctuaryCooldown: number;
+    selectedPoolTypes: SanctuaryType[];
+    vpModeEnabled: boolean;
+    ratingMode: OnlineRatingMode;
+    pieceTheme: PieceTheme;
+    opponentType: OpponentType;
+    playerColor: Color;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isGameMode(value: unknown): value is GameMode {
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(MODE_PRESETS, value);
+}
+
+function isOnlineRatingMode(value: unknown): value is OnlineRatingMode {
+    return value === "casual" || value === "rated";
+}
+
+function isPieceTheme(value: unknown): value is PieceTheme {
+    return value === "Castles" || value === "Chess";
+}
+
+function isOpponentType(value: unknown): value is OpponentType {
+    return value === "human" || value === "random-ai";
+}
+
+function isColor(value: unknown): value is Color {
+    return value === "w" || value === "b";
+}
+
+function isSanctuaryType(value: unknown): value is SanctuaryType {
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(SanctuaryConfig, value);
+}
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function readPersistedSetup(): PersistedGameSetup | null {
+    if (typeof window === "undefined") return null;
+
+    try {
+        const raw = window.localStorage.getItem(SETUP_STORAGE_KEY);
+        if (!raw) return null;
+        const value = JSON.parse(raw) as unknown;
+        if (!isRecord(value) || value.schemaVersion !== 1) return null;
+
+        const selectedMode = isGameMode(value.selectedMode) ? value.selectedMode : "standard";
+        const preset = MODE_PRESETS[selectedMode];
+        const selectedSanctuaries = Array.isArray(value.selectedSanctuaries)
+            ? value.selectedSanctuaries.filter(isSanctuaryType)
+            : preset.sanctuaries;
+        const selectedPoolTypes = Array.isArray(value.selectedPoolTypes)
+            ? value.selectedPoolTypes.filter(isSanctuaryType)
+            : (Object.keys(SanctuaryConfig) as SanctuaryType[]).filter((type) => SanctuaryConfig[type].startAvailable);
+
+        return {
+            schemaVersion: 1,
+            selectedMode,
+            boardRadius: boundedNumber(value.boardRadius, preset.boardRadius, 4, 12),
+            useRandomCastles: value.useRandomCastles === true,
+            timeInitial: boundedNumber(value.timeInitial, preset.timeInitial, 0, 999),
+            timeIncrement: boundedNumber(value.timeIncrement, preset.timeIncrement, 0, 999),
+            selectedSanctuaries,
+            sanctuaryUnlockTurn: boundedNumber(value.sanctuaryUnlockTurn, 0, 0, 99),
+            sanctuaryCooldown: boundedNumber(value.sanctuaryCooldown, preset.sanctuaryCooldown, 1, 20),
+            selectedPoolTypes,
+            vpModeEnabled: value.vpModeEnabled === true,
+            ratingMode: isOnlineRatingMode(value.ratingMode) ? value.ratingMode : "casual",
+            pieceTheme: isPieceTheme(value.pieceTheme) ? value.pieceTheme : readPreferredPieceTheme(),
+            opponentType: isOpponentType(value.opponentType) ? value.opponentType : "human",
+            playerColor: isColor(value.playerColor) ? value.playerColor : "w",
+        };
+    } catch {
+        return null;
+    }
+}
+
+function writePersistedSetup(setup: PersistedGameSetup): void {
+    if (typeof window === "undefined") return;
+
+    try {
+        window.localStorage.setItem(SETUP_STORAGE_KEY, JSON.stringify(setup));
+    } catch {
+        // Setup persistence is optional; private browsing or quota failures should not block play.
+    }
+}
+
 function createSeededRandom(seed: number): () => number {
     let state = seed >>> 0;
     return () => {
@@ -141,26 +244,30 @@ const GameSetup: React.FC<GameSetupProps> = ({
     onlineNotificationCount = 0,
     onlineNotificationLabel
 }) => {
+    const persistedSetup = useMemo(() => readPersistedSetup(), []);
     // Game Mode State
-    const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
+    const [selectedMode, setSelectedMode] = useState<GameMode>(persistedSetup?.selectedMode ?? 'standard');
     
     // Setup State - defaults match 'standard' mode preset
-    const [boardRadius, setBoardRadius] = useState<number>(MODE_PRESETS.standard.boardRadius); // 7
-    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(false);
-    const [timeInitial, setTimeInitial] = useState<number>(MODE_PRESETS.standard.timeInitial); // 20
-    const [timeIncrement, setTimeIncrement] = useState<number>(MODE_PRESETS.standard.timeIncrement); // 20
+    const [boardRadius, setBoardRadius] = useState<number>(persistedSetup?.boardRadius ?? MODE_PRESETS.standard.boardRadius); // 7
+    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(persistedSetup?.useRandomCastles ?? false);
+    const [timeInitial, setTimeInitial] = useState<number>(persistedSetup?.timeInitial ?? MODE_PRESETS.standard.timeInitial); // 20
+    const [timeIncrement, setTimeIncrement] = useState<number>(persistedSetup?.timeIncrement ?? MODE_PRESETS.standard.timeIncrement); // 20
     
     // Sanctuary Selection - Default: Wolf + Healer (Tier 1)
     const [selectedSanctuaries, setSelectedSanctuaries] = useState<Set<SanctuaryType>>(
-        new Set([SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring])
+        new Set(persistedSetup?.selectedSanctuaries ?? [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring])
     );
     
     // Sanctuary Configuration
-    const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(0);  // Always unlocked
-    const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
+    const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(persistedSetup?.sanctuaryUnlockTurn ?? 0);  // Always unlocked
+    const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(persistedSetup?.sanctuaryCooldown ?? 10);
     
     // Pool Selection - Default based on SanctuaryConfig.startAvailable
     const [selectedPoolTypes, setSelectedPoolTypes] = useState<Set<SanctuaryType>>(() => {
+        if (persistedSetup?.selectedPoolTypes) {
+            return new Set(persistedSetup.selectedPoolTypes);
+        }
         const defaults = new Set<SanctuaryType>();
         (Object.keys(SanctuaryConfig) as SanctuaryType[]).forEach(t => {
             if (SanctuaryConfig[t].startAvailable) {
@@ -171,17 +278,17 @@ const GameSetup: React.FC<GameSetupProps> = ({
     });
 
     // Game Rules - Optional modes
-    const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
-    const [ratingMode, setRatingMode] = useState<OnlineRatingMode>('casual');
+    const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(persistedSetup?.vpModeEnabled ?? false);
+    const [ratingMode, setRatingMode] = useState<OnlineRatingMode>(persistedSetup?.ratingMode ?? 'casual');
     
     // Piece Theme Selection - Default to Castles
-    const [pieceTheme, setPieceTheme] = useState<PieceTheme>(() => readPreferredPieceTheme());
+    const [pieceTheme, setPieceTheme] = useState<PieceTheme>(() => persistedSetup?.pieceTheme ?? readPreferredPieceTheme());
     
     // Opponent Selection - Default to Human (local 2-player)
-    const [opponentType, setOpponentType] = useState<OpponentType>('human');
+    const [opponentType, setOpponentType] = useState<OpponentType>(persistedSetup?.opponentType ?? 'human');
     
     // Player Color Selection - Only relevant when playing vs AI (default: human plays white)
-    const [playerColor, setPlayerColor] = useState<Color>('w');
+    const [playerColor, setPlayerColor] = useState<Color>(persistedSetup?.playerColor ?? 'w');
     
     // Tooltip state for sanctuary piece preview
     const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
@@ -196,6 +303,41 @@ const GameSetup: React.FC<GameSetupProps> = ({
         setSelectedSanctuaries(new Set(preset.sanctuaries));
         setSanctuaryCooldown(preset.sanctuaryCooldown);
     };
+
+    useEffect(() => {
+        writePersistedSetup({
+            schemaVersion: 1,
+            selectedMode,
+            boardRadius,
+            useRandomCastles,
+            timeInitial,
+            timeIncrement,
+            selectedSanctuaries: Array.from(selectedSanctuaries),
+            sanctuaryUnlockTurn,
+            sanctuaryCooldown,
+            selectedPoolTypes: Array.from(selectedPoolTypes),
+            vpModeEnabled,
+            ratingMode,
+            pieceTheme,
+            opponentType,
+            playerColor,
+        });
+    }, [
+        selectedMode,
+        boardRadius,
+        useRandomCastles,
+        timeInitial,
+        timeIncrement,
+        selectedSanctuaries,
+        sanctuaryUnlockTurn,
+        sanctuaryCooldown,
+        selectedPoolTypes,
+        vpModeEnabled,
+        ratingMode,
+        pieceTheme,
+        opponentType,
+        playerColor,
+    ]);
 
     const toggleSanctuary = (type: SanctuaryType) => {
         setSelectedSanctuaries(prev => {
@@ -501,9 +643,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
                             type="button"
                             onClick={handleCreateOnlineChallenge}
                             className="setup-action-button challenge"
-                            title="Create a private friend challenge from this setup"
+                            title="Create a setup challenge link. For friend games, use People or a profile Challenge button."
                         >
-                            Invite Friend
+                            Copy Setup Challenge Link
                         </button>
                     )}
                     {onCreateOpenSeek && (

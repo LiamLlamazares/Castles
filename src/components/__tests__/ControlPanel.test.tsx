@@ -256,6 +256,71 @@ describe("ControlPanel", () => {
     expect(screen.getByTestId("online-clock-w")).toHaveTextContent("0:54");
   });
 
+  it("shows blank clocks and disables turn controls in analysis without saved clock data", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+        hasGameStarted
+        timeControl={{ initial: 20, increment: 20 }}
+        isAnalysisMode
+      />
+    );
+
+    expect(screen.getByTestId("online-clock-w")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("online-clock-w")).toHaveAccessibleName("White clock not saved");
+    expect(screen.getByTestId("online-clock-b")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("online-clock-b")).toHaveAccessibleName("Black clock not saved");
+    expect(screen.queryByText("20:00")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pass" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Resign" })).toBeDisabled();
+  });
+
+  it("freezes saved clock data in analysis instead of ticking it down", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        hasGameStarted
+        isAnalysisMode
+        onlineClock={{
+          timeControl: { initialMs: 60_000, incrementMs: 0 },
+          remainingMs: { w: 60_000, b: 60_000 },
+          activeColor: "w",
+          runningSince: 0,
+          serverNow: 5_000,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId("online-clock-w")).toHaveTextContent("1:00");
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByTestId("online-clock-w")).toHaveTextContent("1:00");
+  });
+
+  it("labels library saving as analysis while in analysis mode", () => {
+    const onSaveGame = vi.fn();
+    render(
+      <ControlPanel
+        {...baseProps}
+        onSaveGame={onSaveGame}
+        isAnalysisMode
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save Analysis" });
+    expect(saveButton).toHaveAttribute("title", "Name this analysis and save it to Library");
+    expect(screen.queryByRole("button", { name: "Save Game" })).not.toBeInTheDocument();
+
+    fireEvent.click(saveButton);
+    expect(onSaveGame).toHaveBeenCalledOnce();
+  });
+
   it("disables play controls when an online result has ended the game", () => {
     render(
       <ControlPanel

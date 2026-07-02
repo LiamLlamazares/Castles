@@ -79,7 +79,7 @@ describe("GameSetup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Rated" }));
     fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
-    fireEvent.click(screen.getByRole("button", { name: "Invite Friend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Setup Challenge Link" }));
     fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
 
     expect(onPlay.mock.calls[0][10]).toBe("rated");
@@ -98,6 +98,27 @@ describe("GameSetup", () => {
     expect(onPlay.mock.calls[0][8]).toBe("Chess");
   });
 
+  it("persists setup choices and hydrates them on the next setup visit", () => {
+    const onPlay = vi.fn();
+    const { unmount } = render(<GameSetup onPlay={onPlay} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "quick" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rated" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
+
+    expect(onPlay.mock.calls[0][0].config.nSquares).toBe(5);
+    expect(onPlay.mock.calls[0][10]).toBe("rated");
+
+    unmount();
+    const hydratedPlay = vi.fn();
+    render(<GameSetup onPlay={hydratedPlay} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
+
+    expect(hydratedPlay.mock.calls[0][0].config.nSquares).toBe(5);
+    expect(hydratedPlay.mock.calls[0][10]).toBe("rated");
+  });
+
   it("passes the preview setup through when creating an invite challenge", () => {
     const previewSanctuaries = [
       new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
@@ -110,7 +131,7 @@ describe("GameSetup", () => {
     const onCreateOnlineChallenge = vi.fn();
     render(<GameSetup onPlay={vi.fn()} onCreateOnlineChallenge={onCreateOnlineChallenge} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Invite Friend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Setup Challenge Link" }));
 
     expect(onCreateOnlineChallenge).toHaveBeenCalledTimes(1);
     expect(onCreateOnlineChallenge.mock.calls[0][3]).toBe(previewSanctuaries);
@@ -120,7 +141,7 @@ describe("GameSetup", () => {
     ]);
   });
 
-  it("orders setup actions around local play, friend invite, then public lobby listing", () => {
+  it("labels the generic setup challenge as a link and points friend games to People", () => {
     render(
       <GameSetup
         onPlay={vi.fn()}
@@ -133,11 +154,11 @@ describe("GameSetup", () => {
       screen.getByRole("group", { name: "Game actions" }).querySelectorAll(".setup-action-button")
     ).map((element) => element.textContent?.trim());
 
-    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "List in Lobby"]);
+    expect(actionLabels).toEqual(["Play Local", "Copy Setup Challenge Link", "List in Lobby"]);
     expect(screen.queryByRole("button", { name: "Private Link" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Invite Friend" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Copy Setup Challenge Link" })).toHaveAttribute(
       "title",
-      "Create a private friend challenge from this setup"
+      "Create a setup challenge link. For friend games, use People or a profile Challenge button."
     );
     expect(screen.getByRole("button", { name: "List in Lobby" })).toHaveAttribute(
       "title",

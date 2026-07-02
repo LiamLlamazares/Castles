@@ -125,6 +125,11 @@ export interface OnlineClockStateDTO {
   flag?: { color: Color; at: number };
 }
 
+export interface OnlineReplayClockPointDTO {
+  moveIndex: number;
+  clock: OnlineClockStateDTO;
+}
+
 interface VersionedAction {
   baseVersion: number;
 }
@@ -155,6 +160,7 @@ export interface OnlineGameSnapshotDTO {
   turnPhase: TurnPhase;
   result?: OnlineGameResultDTO;
   clock?: OnlineClockStateDTO;
+  clockHistory?: OnlineReplayClockPointDTO[];
 }
 
 export type OnlineConnectionStatus =

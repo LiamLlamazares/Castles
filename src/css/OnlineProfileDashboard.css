@@ -391,6 +391,35 @@
   overflow-wrap: anywhere;
 }
 
+.online-profile-challenge-records {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.online-profile-challenge-records li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  border-top: 1px solid #3d3a34;
+  padding-top: 6px;
+  color: #bababa;
+  font-size: 0.82rem;
+}
+
+.online-profile-challenge-records strong,
+.online-profile-challenge-records span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.online-profile-challenge-records strong {
+  color: #d4d4d4;
+}
+
 .online-profile-inline-link {
   min-width: 0;
   border: 0;
@@ -702,7 +731,8 @@
 }
 
 [data-theme="light"] .online-profile-avatar-settings fieldset,
-[data-theme="light"] .online-profile-public-games li {
+[data-theme="light"] .online-profile-public-games li,
+[data-theme="light"] .online-profile-challenge-records li {
   border-color: #d9d9d9;
 }
 
@@ -768,6 +798,11 @@
 }
 
 [data-theme="light"] .online-profile-inline-link,
-[data-theme="light"] .online-profile-public-games span {
+[data-theme="light"] .online-profile-public-games span,
+[data-theme="light"] .online-profile-challenge-records span {
   color: #555555;
+}
+
+[data-theme="light"] .online-profile-challenge-records strong {
+  color: #1f1f1f;
 }

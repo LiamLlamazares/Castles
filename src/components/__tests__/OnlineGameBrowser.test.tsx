@@ -840,9 +840,8 @@ describe("OnlineGameBrowser", () => {
     expect(within(people).queryByText("Could not follow that account.")).not.toBeInTheDocument();
   });
 
-  it("lets signed-in players challenge and copy invites for visible and followed accounts", async () => {
+  it("lets signed-in players challenge visible and followed accounts without duplicate copy-invite actions", async () => {
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
-    const onCopyChallengeAccountInvite = vi.fn().mockResolvedValue(undefined);
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: publicProfile("Ada"),
@@ -860,7 +859,6 @@ describe("OnlineGameBrowser", () => {
         {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
         loadAccountProfile={loadAccountProfile}
         onChallengeAccount={onChallengeAccount}
-        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
       />
     );
 
@@ -870,9 +868,9 @@ describe("OnlineGameBrowser", () => {
     expect(followingRow).not.toBeNull();
     fireEvent.click(within(followingRow as HTMLElement).getByRole("button", { name: "Challenge Samir" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
-    fireEvent.click(within(followingRow as HTMLElement).getByRole("button", { name: "Copy challenge invite for Samir" }));
-    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
-    expect(await within(people).findByText("Challenge invite copied for Samir.")).toBeInTheDocument();
+    expect(within(followingRow as HTMLElement).queryByRole("button", {
+      name: "Copy challenge invite for Samir",
+    })).not.toBeInTheDocument();
 
     fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Ada" },
@@ -882,9 +880,9 @@ describe("OnlineGameBrowser", () => {
     const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
     fireEvent.click(within(profileCard).getByRole("button", { name: "Challenge Ada" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
-    fireEvent.click(within(profileCard).getByRole("button", { name: "Copy challenge invite for Ada" }));
-    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Ada"));
-    expect(await within(people).findByText("Challenge invite copied for Ada.")).toBeInTheDocument();
+    expect(within(profileCard).queryByRole("button", {
+      name: "Copy challenge invite for Ada",
+    })).not.toBeInTheDocument();
   });
 
   it("offers a profile-card rematch from loaded head-to-head account history", async () => {
@@ -1053,6 +1051,38 @@ describe("OnlineGameBrowser", () => {
     expect(within(rows[1]).getByTitle("3 rated games")).toHaveTextContent("1590?");
     expect(people).not.toHaveTextContent("account_cleo");
     expect(loadRatingLeaderboard).toHaveBeenCalledWith({ limit: 10, scope: "global" });
+  });
+
+  it("explains why new accounts are absent from empty rating leaders", async () => {
+    const loadRatingLeaderboard = vi.fn().mockImplementation((options?: { scope?: "global" | "following" }) => Promise.resolve({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      scope: options?.scope ?? "global",
+      entries: [],
+    }));
+    render(
+      <OnlineGameBrowser
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onReplay={vi.fn()}
+        onSpectate={vi.fn()}
+        onBack={vi.fn()}
+        account={accountFixture("Liam")}
+        {...socialPropsWithFollowing([])}
+        loadRatingLeaderboard={loadRatingLeaderboard}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const leaders = await within(people).findByRole("region", { name: "Rating leaders" });
+    expect(await within(leaders).findByText(
+      "No rated leaderboard entries yet. Accounts appear here after a completed rated game between signed-in players."
+    )).toBeInTheDocument();
+
+    fireEvent.click(within(leaders).getByRole("button", { name: "Following" }));
+    expect(await within(leaders).findByText(
+      "No followed players have rated leaderboard entries yet. Accounts appear here after a completed rated game between signed-in players."
+    )).toBeInTheDocument();
   });
 
   it("opens public profiles directly from rating leader rows", async () => {
@@ -1230,7 +1260,6 @@ describe("OnlineGameBrowser", () => {
   it("shows an online-now rail for followed players with quick actions", async () => {
     const onSpectate = vi.fn();
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
-    const onCopyChallengeAccountInvite = vi.fn().mockResolvedValue(undefined);
     const followedLiveGame = summary({
       gameId: "game_friend_rail_live",
       participants: [
@@ -1259,7 +1288,6 @@ describe("OnlineGameBrowser", () => {
           publicProfile("Kai", { following: true }, { visibility: "visible", status: "away" }),
         ])}
         onChallengeAccount={onChallengeAccount}
-        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
       />
     );
 
@@ -1282,10 +1310,9 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Challenge Samir from online now" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
 
-    fireEvent.click(within(samirCard as HTMLElement).getByRole("button", {
+    expect(within(samirCard as HTMLElement).queryByRole("button", {
       name: "Copy challenge invite for Samir from online now",
-    }));
-    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
+    })).not.toBeInTheDocument();
 
     fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Select Samir from online now" }));
     expect(await within(people).findByRole("article", { name: "Profile Samir" })).toHaveTextContent("Mutual friend");
@@ -3226,8 +3253,7 @@ describe("OnlineGameBrowser", () => {
     expect(await within(people).findByText("Samir is not available for challenges right now.")).toBeInTheDocument();
   });
 
-  it("shows a copy-invite error when the direct invite handler rejects", async () => {
-    const onCopyChallengeAccountInvite = vi.fn().mockRejectedValue(new Error("clipboard unavailable"));
+  it("does not render legacy copy-invite actions for followed players", async () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -3239,15 +3265,12 @@ describe("OnlineGameBrowser", () => {
         account={accountFixture("Liam")}
         accountStatus="ready"
         {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
-        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
       />
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.click(await within(people).findByRole("button", { name: "Copy challenge invite for Samir" }));
-
-    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
-    expect(await within(people).findByText("Could not copy a challenge invite for Samir.")).toBeInTheDocument();
+    expect(await within(people).findByText("Samir")).toBeInTheDocument();
+    expect(within(people).queryByRole("button", { name: "Copy challenge invite for Samir" })).not.toBeInTheDocument();
   });
 
   it("ignores stale social lookup responses after the account changes", async () => {
@@ -6087,19 +6110,19 @@ describe("OnlineGameBrowser", () => {
     await screen.findByText("seek_initial");
 
     await act(async () => {
-      vi.advanceTimersByTime(31_000);
+      vi.advanceTimersByTime(1_000);
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
     expect(screen.getByText("seek_initial")).toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent("Loading lobby listings");
 
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
     expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      vi.advanceTimersByTime(61_000);
+      vi.advanceTimersByTime(60_000);
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(3));
     expect(await screen.findByText("seek_after_backoff")).toBeInTheDocument();
@@ -6128,7 +6151,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("seek_initial");
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
     expect(loadOpenSeeks).toHaveBeenCalledTimes(1);
 
@@ -6171,7 +6194,7 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(accept).toBeDisabled());
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
     await waitFor(() => expect(loadOpenSeeks.mock.calls.length).toBeGreaterThanOrEqual(2));
     expect(screen.getByRole("article", { name: /seek_acceptable/i })).toBeInTheDocument();
@@ -6213,7 +6236,7 @@ describe("OnlineGameBrowser", () => {
     const accept = within(row).getByRole("button", { name: "Accept lobby listing seek_background_race" });
 
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
 
@@ -6258,7 +6281,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("seek_before_refresh");
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
 
@@ -6334,7 +6357,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByRole("region", { name: "Your lobby listing" });
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(1_000);
     });
 
     await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());

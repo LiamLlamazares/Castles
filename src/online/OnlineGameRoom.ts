@@ -25,6 +25,7 @@ import {
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
   OnlineGameSnapshotDTO,
+  OnlineReplayClockPointDTO,
   OnlineReject,
 } from "./types";
 
@@ -120,6 +121,7 @@ export class OnlineGameRoom {
   private timeout?: AcceptedOnlineTimeoutRecord;
   private result?: OnlineGameResultDTO;
   private stateVersion = 0;
+  private initialClockState?: OnlineClockRecord;
   private clockState?: OnlineClockRecord;
 
   private constructor(
@@ -137,7 +139,8 @@ export class OnlineGameRoom {
       board: hydrated.board,
     };
     this.acceptedActions = [];
-    this.clockState = this.createInitialClockState();
+    this.initialClockState = this.createInitialClockState();
+    this.clockState = this.cloneClockRecord(this.initialClockState);
   }
 
   static create(input: OnlineGameRoomCreateInput): OnlineGameRoom {
@@ -149,7 +152,8 @@ export class OnlineGameRoom {
       input.verifyToken ?? defaultTokenVerifier,
       input.now ?? Date.now
     );
-    room.clockState = room.cloneClockRecord(input.clock) ?? room.clockState;
+    room.initialClockState = room.cloneClockRecord(input.clock) ?? room.initialClockState;
+    room.clockState = room.cloneClockRecord(room.initialClockState) ?? room.clockState;
 
     for (const entry of input.acceptedActions ?? []) {
       room.replayAcceptedAction(entry);
@@ -205,6 +209,7 @@ export class OnlineGameRoom {
       turnPhase: this.context.gameEngine.getTurnPhase(this.state.turnCounter),
       result,
       clock: this.snapshotClock(now),
+      clockHistory: this.snapshotClockHistory(now),
     };
   }
 
@@ -296,7 +301,7 @@ export class OnlineGameRoom {
         ? { additionalBlackCredentials: this.blackCredentials.slice(1) }
         : {}),
       setup: this.setup,
-      clock: this.cloneClockRecord(this.clockState),
+      clock: this.cloneClockRecord(this.initialClockState),
       acceptedActions: [...this.acceptedActions],
       timeout: this.timeout,
       result: this.result,
@@ -413,17 +418,52 @@ export class OnlineGameRoom {
     };
   }
 
-  private snapshotClock(now: number): OnlineClockStateDTO | undefined {
+  private snapshotClockRecord(clock: OnlineClockRecord, serverNow: number): OnlineClockStateDTO | undefined {
     const timeControl = this.timeControlMs();
-    if (!timeControl || !this.clockState) return undefined;
+    if (!timeControl) return undefined;
     return {
       timeControl,
-      remainingMs: { ...this.clockState.remainingMs },
-      activeColor: this.clockState.activeColor,
-      runningSince: this.clockState.runningSince,
-      serverNow: now,
-      flag: this.clockState.flag ? { ...this.clockState.flag } : undefined,
+      remainingMs: { ...clock.remainingMs },
+      activeColor: clock.activeColor,
+      runningSince: clock.runningSince,
+      serverNow,
+      flag: clock.flag ? { ...clock.flag } : undefined,
     };
+  }
+
+  private snapshotClock(now: number): OnlineClockStateDTO | undefined {
+    if (!this.clockState) return undefined;
+    return this.snapshotClockRecord(this.clockState, now);
+  }
+
+  private snapshotClockHistory(now: number): OnlineReplayClockPointDTO[] | undefined {
+    const points: OnlineReplayClockPointDTO[] = [];
+    if (this.initialClockState) {
+      const initialClock = this.snapshotClockRecord(
+        this.initialClockState,
+        this.initialClockState.runningSince ?? now
+      );
+      if (initialClock) {
+        points.push({ moveIndex: 0, clock: initialClock });
+      }
+    }
+
+    this.acceptedActions.forEach((entry, index) => {
+      if (!entry.clock) return;
+      const clock = this.snapshotClockRecord(entry.clock, entry.playedAt);
+      if (clock) {
+        points.push({ moveIndex: index + 1, clock });
+      }
+    });
+
+    if (this.timeout?.clock) {
+      const clock = this.snapshotClockRecord(this.timeout.clock, this.timeout.adjudicatedAt);
+      if (clock) {
+        points.push({ moveIndex: this.acceptedActions.length, clock });
+      }
+    }
+
+    return points.length > 0 ? points : undefined;
   }
 
   private settleClockAt(now: number): void {

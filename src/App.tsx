@@ -131,7 +131,14 @@ import {
   ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
   type OnlineAccountReportReason,
 } from './online/social';
-import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO, OnlineRatingMode } from './online/types';
+import type {
+  OnlineClientSession,
+  OnlineGameSetupDTO,
+  OnlineGameSnapshotDTO,
+  OnlineRatingMode,
+  OnlineReplayClockPointDTO,
+} from './online/types';
+import { hydrateAnalysisMoveTreeFromOnlineSnapshot } from './online/replayAnalysis';
 import {
   clearRecentOnlineGames,
   loadRecentOnlineGames,
@@ -148,7 +155,6 @@ import {
   createSavedGameRecord,
 } from './Classes/Services/GameLibraryRepository';
 import { loadPGNText } from './Classes/Services/PGNLoadService';
-import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online' | 'people' | 'profile';
@@ -189,6 +195,7 @@ const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 const ONLINE_CHALLENGE_NAV_REFRESH_MS = 30_000;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
+const ONLINE_LOBBY_SETUP_STORAGE_KEY = "castles_online_lobby_setup_v1";
 const ONLINE_CHALLENGE_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; label: string }> = [
   { value: "abuse", label: "Abuse" },
   { value: "cheating", label: "Cheating" },
@@ -196,6 +203,27 @@ const ONLINE_CHALLENGE_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReport
   { value: "impersonation", label: "Impersonation" },
   { value: "other", label: "Other" },
 ];
+
+function readStoredOnlineLobbySetup(): OnlineGameSetupDTO | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(ONLINE_LOBBY_SETUP_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as OnlineGameSetupDTO;
+    return serializeOnlineGameSetup(hydrateOnlineGameSetupDTO(parsed));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOnlineLobbySetup(setup: OnlineGameSetupDTO): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ONLINE_LOBBY_SETUP_STORAGE_KEY, JSON.stringify(setup));
+  } catch {
+    // Last setup persistence is best-effort; storage failures should not block play.
+  }
+}
 
 interface GameConfig {
   board?: Board;
@@ -216,6 +244,7 @@ interface GameConfig {
   pieceTheme?: PieceTheme;
   ratingMode?: OnlineRatingMode;
   isAnalysisMode?: boolean;
+  analysisClockHistory?: OnlineReplayClockPointDTO[];
   opponentConfig?: AIOpponentConfig;
 }
 
@@ -235,6 +264,7 @@ interface LoadGameData {
   pieceTheme?: PieceTheme;
   timeControl?: { initial: number; increment: number };
   victoryPoints?: { w: number; b: number };
+  analysisClockHistory?: OnlineReplayClockPointDTO[];
 }
 
 interface LoadGameOptions {
@@ -298,15 +328,6 @@ interface SaveGameDialogState {
   resolve: (result: SaveGameToLibraryResult) => void;
 }
 
-function gameSettingsFromSetup(setup: ReturnType<typeof hydrateOnlineGameSetupDTO>) {
-  return setup.sanctuarySettings
-    ? {
-        sanctuaryUnlockTurn: setup.sanctuarySettings.unlockTurn,
-        sanctuaryRechargeTurns: setup.sanctuarySettings.cooldown,
-      }
-    : undefined;
-}
-
 function createGameConfigFromOnlineSnapshot(
   snapshot: OnlineGameSnapshotDTO,
   isAnalysisMode: boolean
@@ -335,6 +356,7 @@ function createGameConfigFromOnlineSnapshot(
     timeControl: setup.timeControl,
     ratingMode: setup.ratingMode,
     isAnalysisMode,
+    analysisClockHistory: snapshot.clockHistory,
   };
 }
 
@@ -356,16 +378,9 @@ function createGameConfigFromLoadData(data: LoadGameData, isAnalysisMode: boolea
     pieceTheme: data.pieceTheme,
     timeControl: data.timeControl,
     victoryPoints: data.victoryPoints,
+    analysisClockHistory: data.analysisClockHistory,
     isAnalysisMode,
   };
-}
-
-function createReplayMoveTreeFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO): MoveTree {
-  const { state } = createInitialStateFromSetupDTO(snapshot.setup);
-  for (const record of snapshot.moveHistory) {
-    state.moveTree.addMove(record);
-  }
-  return state.moveTree;
 }
 
 function onlineSnapshotHasRenderableState(snapshot: OnlineGameSnapshotDTO): boolean {
@@ -377,7 +392,8 @@ function createSetupBackedReplayGameConfigFromOnlineSnapshot(
 ): GameConfig {
   const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
   const { state } = createInitialStateFromSetupDTO(snapshot.setup);
-  const moveTree = createReplayMoveTreeFromOnlineSnapshot(snapshot);
+  const replay = hydrateAnalysisMoveTreeFromOnlineSnapshot(snapshot);
+  const moveTree = replay.moveTree;
   const turnCounter = snapshot.state.turnCounter > 0
     ? snapshot.state.turnCounter
     : snapshot.moveHistory.length;
@@ -400,6 +416,7 @@ function createSetupBackedReplayGameConfigFromOnlineSnapshot(
     timeControl: setup.timeControl,
     ratingMode: setup.ratingMode,
     victoryPoints: snapshot.state.victoryPoints,
+    analysisClockHistory: snapshot.clockHistory,
     isAnalysisMode: true,
   };
 }
@@ -407,41 +424,26 @@ function createSetupBackedReplayGameConfigFromOnlineSnapshot(
 function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO): GameConfig {
   const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
   const hydratedConfig = createGameConfigFromOnlineSnapshot(snapshot, true);
-  if (snapshot.moveHistory.length > 0) {
-    try {
-      const replayMoveTree = createReplayMoveTreeFromOnlineSnapshot(snapshot);
-      const replayPgn = PGNService.generatePGN(
-        setup.board,
-        setup.pieces,
-        snapshot.moveHistory,
-        setup.sanctuaries,
-        {},
-        replayMoveTree,
-        gameSettingsFromSetup(setup)
-      );
-      const replay = loadPGNText(replayPgn);
-      if (replay && (!replay.diagnostics || replay.diagnostics.length === 0)) {
-        return {
-          ...hydratedConfig,
-          board: replay.board,
-          pieces: replay.pieces,
-          castles: replay.castles,
-          layout: getStartingLayout(replay.board),
-          moveTree: replay.moveTree,
-          turnCounter: replay.turnCounter,
-          sanctuaries: replay.sanctuaries,
-          sanctuarySettings: replay.sanctuarySettings ?? setup.sanctuarySettings,
-          initialPoolTypes: replay.sanctuaryPool ?? hydratedConfig.initialPoolTypes,
-          graveyard: replay.graveyard,
-          phoenixRecords: replay.phoenixRecords,
-          promotionPending: replay.promotionPending,
-          victoryPoints: replay.victoryPoints,
-          isAnalysisMode: true,
-        };
-      }
-    } catch (error) {
-      console.warn("Could not rebuild archived game replay from move history", error);
-    }
+  const replay = hydrateAnalysisMoveTreeFromOnlineSnapshot(snapshot);
+  const replaySnapshot = replay.status === "complete" ? replay.moveTree.current.snapshot : undefined;
+  if (replaySnapshot) {
+    return {
+      ...hydratedConfig,
+      board: setup.board,
+      pieces: replaySnapshot.pieces.map((piece) => piece.clone()),
+      castles: replaySnapshot.castles.map((castle) => castle.clone()),
+      layout: getStartingLayout(setup.board),
+      moveTree: replay.moveTree,
+      turnCounter: replaySnapshot.turnCounter,
+      sanctuaries: replaySnapshot.sanctuaries.map((sanctuary) => sanctuary.clone()),
+      sanctuarySettings: setup.sanctuarySettings,
+      initialPoolTypes: [...replaySnapshot.sanctuaryPool],
+      graveyard: replaySnapshot.graveyard.map((piece) => piece.clone()),
+      phoenixRecords: replaySnapshot.phoenixRecords.map((record) => ({ ...record })),
+      promotionPending: hydratedConfig.promotionPending,
+      victoryPoints: replaySnapshot.victoryPoints,
+      isAnalysisMode: true,
+    };
   }
 
   return onlineSnapshotHasRenderableState(snapshot)
@@ -479,6 +481,9 @@ function App() {
   const [view, setView] = useState<ViewState>(initialProfileDisplayName ? 'profile' : 'game');
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(initialProfileDisplayName);
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
+  const [storedOnlineLobbySetup, setStoredOnlineLobbySetup] = useState<OnlineGameSetupDTO | null>(
+    () => readStoredOnlineLobbySetup()
+  );
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [viewStack, setViewStack] = useState<ViewState[]>([]);
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
@@ -1229,6 +1234,11 @@ function App() {
                   ? 'Back to Profile'
                   : 'Back to game';
 
+  const rememberOnlineLobbySetup = useCallback((setup: OnlineGameSetupDTO) => {
+    setStoredOnlineLobbySetup(setup);
+    writeStoredOnlineLobbySetup(setup);
+  }, []);
+
   const quickMatchSetup = useMemo(() => {
     if (!gameConfig.board || !gameConfig.pieces) return null;
     const timeControl = gameConfig.timeControl ?? { ...DEFAULT_QUICK_MATCH_TIME_CONTROL };
@@ -1256,9 +1266,30 @@ function App() {
   ]);
 
   const onlineLobbySetup = useMemo(() => {
-    if (gameConfig.isAnalysisMode || onlineJoin || onlineSpectator || onlineChallenge) return null;
-    return quickMatchSetup;
-  }, [gameConfig.isAnalysisMode, onlineChallenge, onlineJoin, onlineSpectator, quickMatchSetup]);
+    if (gameConfig.isAnalysisMode || onlineJoin || onlineSpectator || onlineChallenge) {
+      return storedOnlineLobbySetup;
+    }
+    return quickMatchSetup ?? storedOnlineLobbySetup;
+  }, [
+    gameConfig.isAnalysisMode,
+    onlineChallenge,
+    onlineJoin,
+    onlineSpectator,
+    quickMatchSetup,
+    storedOnlineLobbySetup,
+  ]);
+
+  useEffect(() => {
+    if (!quickMatchSetup || gameConfig.isAnalysisMode || onlineJoin || onlineSpectator || onlineChallenge) return;
+    rememberOnlineLobbySetup(quickMatchSetup);
+  }, [
+    gameConfig.isAnalysisMode,
+    onlineChallenge,
+    onlineJoin,
+    onlineSpectator,
+    quickMatchSetup,
+    rememberOnlineLobbySetup,
+  ]);
 
   const quickMatchSetupSummary = useMemo(() => {
     if (!onlineLobbySetup) return undefined;
@@ -1292,6 +1323,17 @@ function App() {
     clearInitialReplayFirstRunSuppression();
     clearAnalysisReturn();
     const layout = getStartingLayout(board);
+    rememberOnlineLobbySetup(serializeOnlineGameSetup({
+      board,
+      pieces,
+      sanctuaries: sanctuaries ?? [],
+      timeControl,
+      sanctuarySettings,
+      gameRules,
+      initialPoolTypes,
+      pieceTheme,
+      ratingMode,
+    }));
 
     clearAutosave();
     clearOnlineUrl();
@@ -1957,19 +1999,19 @@ function App() {
     pieceTheme?: PieceTheme,
     ratingMode?: OnlineRatingMode
   ) => {
-    await createChallengeFromSetup(
-      serializeOnlineGameSetup({
-        board,
-        pieces,
-        sanctuaries: sanctuaries ?? [],
-        timeControl,
-        sanctuarySettings,
-        gameRules,
-        initialPoolTypes,
-        pieceTheme,
-        ratingMode,
-      })
-    );
+    const setup = serializeOnlineGameSetup({
+      board,
+      pieces,
+      sanctuaries: sanctuaries ?? [],
+      timeControl,
+      sanctuarySettings,
+      gameRules,
+      initialPoolTypes,
+      pieceTheme,
+      ratingMode,
+    });
+    rememberOnlineLobbySetup(setup);
+    await createChallengeFromSetup(setup);
   };
 
   const handleChallengeOnlineAccount = async (
@@ -2011,28 +2053,6 @@ function App() {
     if (options.intent === "rematch") {
       setOnlineChallengeShareMessage(`Rematch challenge created for ${displayName}.`);
     }
-  };
-
-  const handleCopyChallengeOnlineAccountInvite = async (displayName: string) => {
-    if (!onlineAccountAuth) {
-      alert("Sign in before challenging an account.");
-      throw new Error("Online account sign-in is required before challenging an account.");
-    }
-    if (!onlineLobbySetup) {
-      setOnlineChallengeShareMessage("Choose a Play setup, then return to People or Profile to copy a challenge invite.");
-      enterSetupView(view === "setup" ? "people" : view);
-      throw new OnlineRequestError(
-        400,
-        "bad_request",
-        "Choose a Play setup from Play, then copy this challenge invite again."
-      );
-    }
-    const created = await createChallengeFromSetup(onlineLobbySetup, { challengedDisplayName: displayName });
-    if (!created) {
-      throw new Error("Targeted online challenge invite was not created.");
-    }
-    await copyOnlineInviteUrl(created.challengedUrl);
-    setOnlineChallengeShareMessage(`Challenge invite copied for ${displayName}.`);
   };
 
   const handleCreateOnlineRematch = async () => {
@@ -2118,19 +2138,19 @@ function App() {
     pieceTheme?: PieceTheme,
     ratingMode?: OnlineRatingMode
   ) => {
-    await createOpenSeekFromSetup(
-      serializeOnlineGameSetup({
-        board,
-        pieces,
-        sanctuaries: sanctuaries ?? [],
-        timeControl,
-        sanctuarySettings,
-        gameRules,
-        initialPoolTypes,
-        pieceTheme,
-        ratingMode,
-      })
-    );
+    const setup = serializeOnlineGameSetup({
+      board,
+      pieces,
+      sanctuaries: sanctuaries ?? [],
+      timeControl,
+      sanctuarySettings,
+      gameRules,
+      initialPoolTypes,
+      pieceTheme,
+      ratingMode,
+    });
+    rememberOnlineLobbySetup(setup);
+    await createOpenSeekFromSetup(setup);
   };
 
   const handleListCurrentSetupInLobby = async (
@@ -3155,6 +3175,7 @@ function App() {
               sanctuarySettings={gameConfig.sanctuarySettings}
               gameRules={gameConfig.gameRules}
               isAnalysisMode={gameConfig.isAnalysisMode}
+              analysisClockHistory={gameConfig.analysisClockHistory}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}
@@ -3280,7 +3301,6 @@ function App() {
           onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
           onReportAccount={onlineAccountSession ? handleReportOnlineAccount : undefined}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
-          onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
         />
       )}
 
@@ -3344,7 +3364,6 @@ function App() {
           onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
           onReportAccount={onlineAccountSession ? handleReportOnlineAccount : undefined}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
-          onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
         />
       )}
 
@@ -3372,6 +3391,7 @@ function App() {
           onReplay={handleReplayOnlineGame}
           onSpectate={handleSpectateOnlineGame}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
+          onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
           onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
           onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBack={returnToPreviousView}

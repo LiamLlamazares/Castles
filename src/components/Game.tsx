@@ -29,7 +29,11 @@ import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { Color, PieceTheme } from "../Constants";
-import type { OnlineClientSession } from "../online/types";
+import type {
+  OnlineClientSession,
+  OnlineClockStateDTO,
+  OnlineReplayClockPointDTO,
+} from "../online/types";
 import type {
   OnlineGameVisibility,
   OnlinePlayerSettableGameVisibility,
@@ -39,6 +43,7 @@ import {
   formatOnlineConnectionStatus,
   formatOnlineGameResult,
 } from "../online/client";
+import { hydrateAnalysisMoveTreeFromSetup } from "../online/replayAnalysis";
 import type { PGNLoadResult } from "../Classes/Services/PGNLoadService";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import { createPieceMap } from "../utils/PieceMap";
@@ -114,6 +119,7 @@ interface GameBoardProps {
   pieceTheme?: PieceTheme;
   opponentConfig?: AIOpponentConfig;
   onlineSession?: OnlineClientSession;
+  analysisClockHistory?: OnlineReplayClockPointDTO[];
   onlineAccountDisplayName?: string | null;
   onOpenOnlineAccount?: () => void;
   onlineNotificationCount?: number;
@@ -139,6 +145,30 @@ function createCurrentPositionAnalysisTree(snapshot: PositionSnapshot): MoveTree
   return tree;
 }
 
+function moveNodeDepth(node: MoveNode): number {
+  let depth = 0;
+  let current: MoveNode | null = node;
+  while (current.parent) {
+    depth += 1;
+    current = current.parent;
+  }
+  return depth;
+}
+
+function findAnalysisClockForNode(
+  history: OnlineReplayClockPointDTO[] | undefined,
+  node: MoveNode | null
+): OnlineClockStateDTO | undefined {
+  if (!history || !node) return undefined;
+  const moveIndex = moveNodeDepth(node);
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index]?.moveIndex === moveIndex) {
+      return history[index].clock;
+    }
+  }
+  return undefined;
+}
+
 function isUsablePGNLoadResult(result: PGNLoadResult | null): result is PGNLoadResult {
   return !!result && (!result.diagnostics || result.diagnostics.length === 0);
 }
@@ -152,6 +182,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   initialLayout = startingLayout,
   initialMoveTree,
   initialTurnCounter = 0,
+  initialSanctuaries = [],
+  initialPoolTypes,
   sanctuarySettings,
   gameRules,
   onResign = () => {},
@@ -175,6 +207,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   pieceTheme = "Castles",
   opponentConfig,
   onlineSession,
+  analysisClockHistory,
   onlineAccountDisplayName,
   onOpenOnlineAccount,
   onlineNotificationCount = 0,
@@ -298,6 +331,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
       getPGN,
       loadPGN
   } = useGameActions();
+  const analysisReplayClock = React.useMemo(() => {
+    if (!isAnalysisMode) return undefined;
+    const node = viewNodeId ? moveTree.findNodeById(viewNodeId) : moveTree.current;
+    return findAnalysisClockForNode(analysisClockHistory, node);
+  }, [analysisClockHistory, isAnalysisMode, moveTree, viewNodeId]);
 
   // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
@@ -681,9 +719,26 @@ const InnerGame: React.FC<GameBoardProps> = ({
       victoryPoints: viewedVictoryPoints ? { ...viewedVictoryPoints } : undefined,
     };
     const hasCompleteMoveSnapshots = moveTreeHasCompleteSnapshots(moveTree);
+    const hydratedReplay = hasCompleteMoveSnapshots
+      ? null
+      : hydrateAnalysisMoveTreeFromSetup({
+          board: initialBoard,
+          pieces: initialPieces,
+          moveTree,
+          sanctuaries: initialSanctuaries,
+          gameSettings: sanctuarySettings
+            ? {
+                sanctuaryUnlockTurn: sanctuarySettings.unlockTurn,
+                sanctuaryRechargeTurns: sanctuarySettings.cooldown,
+              }
+            : undefined,
+          initialPoolTypes,
+        });
     const analysisMoveTree = hasCompleteMoveSnapshots
       ? moveTree.clone()
-      : createCurrentPositionAnalysisTree(analysisSnapshot);
+      : hydratedReplay?.status === "complete"
+        ? hydratedReplay.moveTree
+        : createCurrentPositionAnalysisTree(analysisSnapshot);
     if (hasCompleteMoveSnapshots && viewNodeId) {
       const viewedNode = analysisMoveTree.findNodeById(viewNodeId);
       if (viewedNode) {
@@ -713,6 +768,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [
     onLoadGame,
     board,
+    initialBoard,
+    initialPieces,
+    initialSanctuaries,
+    initialPoolTypes,
     castles,
     pieces,
     turnCounter,
@@ -983,6 +1042,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
           }}
           onNewGame={handleNewGame}
           onShare={onlineSession ? undefined : handleShare}
+          shareLabel="PGN Review Link"
+          shareTitle="Copy static PGN review link"
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           onlineVisibility={currentOnlineVisibility}
           onUpdateOnlineVisibility={
@@ -1003,9 +1064,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
           hasGameStarted={hasGameStarted}
           winner={displayedWinner}
           timeControl={timeControl}
-          onlineClock={onlineSession?.clock}
+          onlineClock={onlineSession?.clock ?? analysisReplayClock}
           isOnline={!!onlineSession}
           isReadOnly={isReadOnlyOnline}
+          isAnalysisMode={isAnalysisMode}
           isActionPending={isOnlineActionPaused}
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}

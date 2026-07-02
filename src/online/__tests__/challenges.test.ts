@@ -9,6 +9,7 @@ import {
   canIdentityCancelChallenge,
   canIdentityDeclineChallenge,
   canSystemExpireChallenge,
+  countOnlineAccountChallengeNavigationActivity,
   createChallengeAcceptedEvent,
   createChallengeCancelledEvent,
   createChallengeCreatedEvent,
@@ -488,6 +489,22 @@ describe("online challenge event validation", () => {
     expectInvalid(missingExpiredBy);
     expectInvalid(missingExpiredAt);
     expectInvalid({ ...expire, expiredBy: "player" });
+  });
+});
+
+describe("online account challenge navigation activity", () => {
+  it("counts only incoming pending challenges as navigation badge activity", () => {
+    expect(
+      countOnlineAccountChallengeNavigationActivity([
+        { role: "challenged", summary: pendingSummary() },
+        { role: "challenger", summary: pendingSummary({ challengeId: "challenge_sent" }) },
+        { role: "challenged", summary: acceptedSummary({ challengeId: "challenge_ready" }) },
+        { role: "challenger", summary: acceptedSummary({ challengeId: "challenge_sent_ready" }) },
+        { role: "challenged", summary: declinedSummary({ challengeId: "challenge_declined" }) },
+        { role: "challenger", summary: cancelledSummary({ challengeId: "challenge_cancelled" }) },
+        { role: "challenged", summary: expiredSummary({ challengeId: "challenge_expired" }) },
+      ])
+    ).toBe(1);
   });
 });
 

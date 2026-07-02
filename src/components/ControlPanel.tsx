@@ -48,6 +48,7 @@ interface ControlPanelProps {
   onlineClock?: OnlineClockStateDTO;
   isOnline?: boolean;
   isReadOnly?: boolean;
+  isAnalysisMode?: boolean;
   isActionPending?: boolean;
   viewNodeId?: string | null;
   victoryPoints?: { w: number, b: number };
@@ -67,13 +68,19 @@ function formatClockMs(ms: number): string {
   return `${minutes}:${seconds < 10 ? `0${seconds}` : seconds}`;
 }
 
-const OnlineClock: React.FC<{ clock: OnlineClockStateDTO; player: Color }> = ({ clock, player }) => {
+const OnlineClock: React.FC<{ clock: OnlineClockStateDTO; player: Color; frozen?: boolean }> = ({
+  clock,
+  player,
+  frozen = false,
+}) => {
   const [clientNow, setClientNow] = React.useState(() => Date.now());
   const receivedAtRef = React.useRef(clientNow);
 
   React.useEffect(() => {
     receivedAtRef.current = Date.now();
     setClientNow(receivedAtRef.current);
+    if (frozen) return;
+
     const intervalId = window.setInterval(() => {
       setClientNow(Date.now());
     }, 250);
@@ -87,11 +94,12 @@ const OnlineClock: React.FC<{ clock: OnlineClockStateDTO; player: Color }> = ({ 
     clock.serverNow,
     clock.remainingMs.w,
     clock.remainingMs.b,
+    frozen,
   ]);
 
-  const estimatedServerNow = clock.serverNow + Math.max(0, clientNow - receivedAtRef.current);
+  const estimatedServerNow = frozen ? clock.serverNow : clock.serverNow + Math.max(0, clientNow - receivedAtRef.current);
   const elapsedMs =
-    clock.activeColor === player && clock.runningSince !== null
+    !frozen && clock.activeColor === player && clock.runningSince !== null
       ? Math.max(0, estimatedServerNow - clock.runningSince)
       : 0;
   const remainingMs = Math.max(0, clock.remainingMs[player] - elapsedMs);
@@ -107,9 +115,11 @@ const OnlineClock: React.FC<{ clock: OnlineClockStateDTO; player: Color }> = ({ 
 };
 
 const NoClock: React.FC<{ player: Color }> = ({ player }) => (
-  <div className={`clock-box ${player}`} data-testid={`online-clock-${player}`}>
-    --:--
-  </div>
+  <div
+    className={`clock-box ${player}`}
+    data-testid={`online-clock-${player}`}
+    aria-label={`${player === "w" ? "White" : "Black"} clock not saved`}
+  />
 );
 
 const PlayerIdentityBadge: React.FC<{ identity: PlayerIdentity }> = ({ identity }) => {
@@ -267,6 +277,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onlineClock,
   isOnline = false,
   isReadOnly = false,
+  isAnalysisMode = false,
   isActionPending = false,
   viewNodeId,
   victoryPoints,
@@ -275,7 +286,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
   const isGameOver = !!winner;
-  const arePlayControlsDisabled = isGameOver || isReadOnly || isActionPending;
+  const arePlayControlsDisabled = isGameOver || isReadOnly || isAnalysisMode || isActionPending;
+  const saveControlLabel = isAnalysisMode ? "Save Analysis" : "Save Game";
+  const saveControlTitle = isAnalysisMode
+    ? "Name this analysis and save it to Library"
+    : "Name this game and save it to Library";
   const moveCount = moveHistory.length;
   const resolvedPlayerIdentities: Partial<Record<Color, PlayerIdentity>> = {
     b: playerIdentities?.b,
@@ -300,14 +315,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         )}
         <div className="player-clock-row">
           {onlineClock ? (
-            <OnlineClock clock={onlineClock} player="b" />
-          ) : isOnline ? (
+            <OnlineClock clock={onlineClock} player="b" frozen={isAnalysisMode} />
+          ) : isOnline || isAnalysisMode ? (
             <NoClock player="b" />
           ) : (
             <ChessClock
               initialTime={(timeControl?.initial ?? 20) * 60}
               increment={timeControl?.increment ?? 0}
-              isActive={hasGameStarted && currentPlayer === "b" && !isGameOver}
+              isActive={hasGameStarted && currentPlayer === "b" && !isGameOver && !isAnalysisMode}
               player="b"
             />
           )}
@@ -328,14 +343,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="player-section white">
         <div className="player-clock-row">
           {onlineClock ? (
-            <OnlineClock clock={onlineClock} player="w" />
-          ) : isOnline ? (
+            <OnlineClock clock={onlineClock} player="w" frozen={isAnalysisMode} />
+          ) : isOnline || isAnalysisMode ? (
             <NoClock player="w" />
           ) : (
             <ChessClock
               initialTime={(timeControl?.initial ?? 20) * 60}
               increment={timeControl?.increment ?? 0}
-              isActive={hasGameStarted && currentPlayer === "w" && !isGameOver}
+              isActive={hasGameStarted && currentPlayer === "w" && !isGameOver && !isAnalysisMode}
               player="w"
             />
           )}
@@ -390,13 +405,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 <button
                   className="control-button save"
                   onClick={onSaveGame}
-                  title="Name this game and save it to Library"
+                  title={saveControlTitle}
                   aria-describedby="save-game-control-help"
                 >
-                  Save Game
+                  {saveControlLabel}
                 </button>
                 <span id="save-game-control-help" className="visually-hidden">
-                  Name this game and save it to Library.
+                  {saveControlTitle}.
                 </span>
               </>
             )}
