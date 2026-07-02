@@ -229,7 +229,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByRole("button", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByText("No account games yet. Signed-in games will appear here for review.")).toBeInTheDocument();
-    expect(screen.getByText("No challenge records.")).toBeInTheDocument();
+    expect(screen.getByText("No open challenges.")).toBeInTheDocument();
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();
     expect(container.querySelector(".online-profile-rating-chart polyline")).toBeInTheDocument();
@@ -282,7 +282,44 @@ describe("OnlineProfileDashboard", () => {
     }));
   });
 
-  it("shows self challenge records with opponent, status, and timestamps", async () => {
+  it("shows only open self challenges with opponent names and no raw challenge ids", async () => {
+    const loadAccountChallenges = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+      challenges: [
+        accountChallengeRecord(),
+        accountChallengeRecord({
+          role: "challenged",
+          challengeId: "challenge_profile_ada",
+          challenger: "Ada",
+          challenged: "Liam",
+          createdAt: "2026-07-01T11:20:00.000Z",
+          expiresAt: "2026-07-02T11:20:00.000Z",
+        }),
+        accountChallengeRecord({
+          role: "challenged",
+          challengeId: "challenge_profile_guest",
+          challengerIdentity: {
+            kind: "session",
+            id: "challenge_AsKOK2kZAPR1_challenged",
+          },
+          challenged: "Liam",
+          createdAt: "2026-07-01T12:25:00.000Z",
+          expiresAt: "2026-07-02T12:25:00.000Z",
+        }),
+        accountChallengeRecord({
+          challengeId: "challenge_profile_old_accepted",
+          challenged: "AcceptedOld",
+          status: "accepted",
+          gameId: "game_accepted_old",
+        }),
+        accountChallengeRecord({
+          challengeId: "challenge_profile_old_cancelled",
+          challenged: "CancelledOld",
+          status: "cancelled",
+        }),
+      ],
+    });
     const cancelledRecord = accountChallengeRecord({
       status: "cancelled",
       updatedAt: "2026-07-01T10:18:00.000Z",
@@ -307,41 +344,30 @@ describe("OnlineProfileDashboard", () => {
             relationship: { self: true, following: false, followedBy: false, blocked: false },
           }),
         })}
-        loadAccountChallenges={vi.fn().mockResolvedValue({
-          protocolVersion: ONLINE_PROTOCOL_VERSION,
-          schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
-          challenges: [
-            accountChallengeRecord(),
-            accountChallengeRecord({
-              role: "challenged",
-              challengeId: "challenge_profile_ada",
-              challenger: "Ada",
-              challenged: "Liam",
-              status: "accepted",
-              createdAt: "2026-07-01T11:20:00.000Z",
-              expiresAt: "2026-07-02T11:20:00.000Z",
-              gameId: "game_accepted_ada",
-            }),
-          ],
-        })}
+        loadAccountChallenges={loadAccountChallenges}
         onCancelAccountChallenge={onCancelAccountChallenge}
       />
     );
 
     expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
-    expect(await screen.findByText("2 challenge records visible to this account.")).toBeInTheDocument();
-    expect(screen.getByText("To Pablo")).toBeInTheDocument();
-    expect(screen.getByText("From Ada")).toBeInTheDocument();
-    expect(screen.getByText("pending")).toBeInTheDocument();
-    expect(screen.getByText("accepted")).toBeInTheDocument();
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
+    expect(await screen.findByText("3 open challenges visible to this account.")).toBeInTheDocument();
+    expect(screen.getByText("Pablo")).toBeInTheDocument();
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+    expect(screen.getByText("Guest player")).toBeInTheDocument();
+    expect(screen.getByText("Sent challenge")).toBeInTheDocument();
+    expect(screen.getAllByText("Received challenge")).toHaveLength(2);
+    expect(screen.queryByText("AcceptedOld")).not.toBeInTheDocument();
+    expect(screen.queryByText("CancelledOld")).not.toBeInTheDocument();
+    expect(screen.queryByText(/challenge_profile_/)).not.toBeInTheDocument();
+    expect(screen.queryByText("challenge_AsKOK2kZAPR1_challenged")).not.toBeInTheDocument();
     expect(screen.getByText("Created 2026-07-01 10:15 UTC")).toBeInTheDocument();
     expect(screen.getByText("Expires 2026-07-02 11:20 UTC")).toBeInTheDocument();
-    expect(screen.getByText("Game game_accepted_ada")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel challenge to Pablo" }));
     await waitFor(() => expect(onCancelAccountChallenge).toHaveBeenCalledWith("challenge_profile_pablo"));
     expect(await screen.findByText("Challenge to Pablo cancelled.")).toBeInTheDocument();
-    expect(screen.getByText("cancelled")).toBeInTheDocument();
+    expect(screen.queryByText("Pablo")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel challenge to Pablo" })).not.toBeInTheDocument();
   });
 

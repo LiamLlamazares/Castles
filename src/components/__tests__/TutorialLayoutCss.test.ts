@@ -191,6 +191,11 @@ describe("Tutorial mobile layout CSS", () => {
     expect(onlineCss).toContain(".online-browser-section-header-compact");
     expect(onlineCss).toContain(".online-browser-lobby-listings + .online-browser-live-section");
     expect(onlineCss).toMatch(/\.online-browser-quick-match-panel\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.035\);/s);
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-panel\s*\{[^}]*grid-template-columns:\s*minmax\(min\(280px,\s*100%\),\s*1fr\)\s*minmax\(220px,\s*340px\);/s);
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-panel\s*\{[^}]*grid-template-areas:\s*"copy actions"\s*"summary actions";/s);
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-copy\s*\{[^}]*grid-area:\s*copy;[^}]*min-width:\s*0;/s);
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-summary\s*\{[^}]*grid-area:\s*summary;[^}]*justify-content:\s*flex-start;/s);
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-actions\s*\{[^}]*grid-area:\s*actions;/s);
     expect(onlineCss).toMatch(/\.online-browser-select select:focus-visible,\s*\.online-seek-owner-panel:focus-visible,\s*\.online-browser-closed-listing:focus-visible\s*\{[^}]*outline:\s*3px solid #bf811d;/s);
   });
 

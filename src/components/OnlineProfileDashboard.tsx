@@ -139,11 +139,23 @@ function formatChallengeTimestamp(value: string): string {
   return `${value.slice(0, 10)} ${value.slice(11, 16)} UTC`;
 }
 
-function challengeOpponentDisplayName(item: OnlineAccountChallengeListItem): string {
+function isOpenChallengeRecord(item: OnlineAccountChallengeListItem): boolean {
+  return item.summary.status === "pending";
+}
+
+function challengeOpponentLabel(item: OnlineAccountChallengeListItem): string {
   const identity = item.role === "challenger"
     ? item.summary.challengedIdentity
     : item.summary.challengerIdentity;
-  return identity.kind === "registered" && identity.displayName ? identity.displayName : identity.id;
+  const displayName = "displayName" in identity && typeof identity.displayName === "string"
+    ? identity.displayName.trim()
+    : "";
+  if (displayName) return displayName;
+  return identity.kind === "registered" ? "Registered player" : "Guest player";
+}
+
+function challengeDirectionLabel(item: OnlineAccountChallengeListItem): string {
+  return item.role === "challenger" ? "Sent challenge" : "Received challenge";
 }
 
 function presenceLabel(profile: OnlineAccountPublicProfile | null): string {
@@ -633,7 +645,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     const activeGamesLoad = loadAccountGames?.({ state: "active", limit: 3 }) ?? Promise.resolve(null);
     const completedGamesLoad = loadAccountGames?.({ state: "archived", limit: 5 }) ?? Promise.resolve(null);
     const ratingHistoryLoad = loadAccountRatingHistory?.() ?? Promise.resolve(null);
-    const challengesLoad = loadAccountChallenges?.({ state: "all" }) ?? Promise.resolve(null);
+    const challengesLoad = loadAccountChallenges?.({ state: "pending" }) ?? Promise.resolve(null);
     const followingLoad = loadAccountFollowing?.() ?? Promise.resolve(null);
     const privacyLoad = loadAccountPrivacy?.() ?? Promise.resolve(null);
     const sessionsLoad = loadAccountSessions?.() ?? Promise.resolve(null);
@@ -667,7 +679,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
         setRatingHistory(ratingHistoryResult.value.entries);
       }
       if (challengesResult.status === "fulfilled" && challengesResult.value) {
-        setChallengeRecords(challengesResult.value.challenges);
+        setChallengeRecords(challengesResult.value.challenges.filter(isOpenChallengeRecord));
       }
       if (followingResult.status === "fulfilled" && followingResult.value) {
         setFollowingCount(followingResult.value.following.length);
@@ -1005,7 +1017,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const handleCancelChallengeRecord = async (item: OnlineAccountChallengeListItem) => {
     if (!onCancelAccountChallenge) return;
     const challengeId = item.summary.challengeId;
-    const opponent = challengeOpponentDisplayName(item);
+    const opponent = challengeOpponentLabel(item);
     setChallengeActionById((current) => ({ ...current, [challengeId]: "cancel" }));
     setChallengeMessage("");
     try {
@@ -1015,7 +1027,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
           record.summary.challengeId === challengeId
             ? { role: response.role, summary: response.summary }
             : record
-        )
+        ).filter(isOpenChallengeRecord)
       );
       setChallengeMessage(`Challenge to ${opponent} cancelled.`);
     } catch (error) {
@@ -1299,10 +1311,10 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Challenges</span>
               <h2>Challenge Inbox</h2>
               {challengeRecords.length === 0 ? (
-                <p>No challenge records.</p>
+                <p>No open challenges.</p>
               ) : (
                 <>
-                  <p>{formatCount(challengeRecords.length, "challenge record")} visible to this account.</p>
+                  <p>{formatCount(challengeRecords.length, "open challenge")} visible to this account.</p>
                   {challengeMessage && (
                     <p role="status" aria-live="polite">
                       {challengeMessage}
@@ -1311,21 +1323,17 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                   <ol className="online-profile-challenge-records">
                     {challengeRecords.map((item) => (
                       <li key={item.summary.challengeId}>
-                        <strong>
-                          {item.role === "challenger" ? "To" : "From"} {challengeOpponentDisplayName(item)}
-                        </strong>
-                        <span>{item.summary.status}</span>
+                        <strong>{challengeOpponentLabel(item)}</strong>
+                        <span>{challengeDirectionLabel(item)}</span>
                         <span>Created {formatChallengeTimestamp(item.summary.createdAt)}</span>
                         <span>Expires {formatChallengeTimestamp(item.summary.expiresAt)}</span>
-                        {item.summary.gameId && <span>Game {item.summary.gameId}</span>}
-                        {item.summary.sourceGameId && <span>Source {item.summary.sourceGameId}</span>}
                         {item.summary.status === "pending" && item.role === "challenger" && onCancelAccountChallenge && (
                           <button
                             type="button"
                             className="online-profile-button danger"
                             onClick={() => void handleCancelChallengeRecord(item)}
                             disabled={challengeActionById[item.summary.challengeId] === "cancel"}
-                            aria-label={`Cancel challenge to ${challengeOpponentDisplayName(item)}`}
+                            aria-label={`Cancel challenge to ${challengeOpponentLabel(item)}`}
                           >
                             {challengeActionById[item.summary.challengeId] === "cancel" ? "Cancelling" : "Cancel"}
                           </button>
