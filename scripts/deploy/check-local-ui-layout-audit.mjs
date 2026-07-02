@@ -112,16 +112,16 @@ const SCENARIOS = [
     steps: [
       { action: "clickButton", text: "Set Up Game" },
       { action: "waitForButton", text: "Play Local" },
-      { action: "waitForText", text: "Invite Friend" },
+      { action: "waitForText", text: "Copy Setup Challenge Link" },
     ],
-    requiredTexts: () => ["Play Local", "Invite Friend", "List in Lobby"],
+    requiredTexts: () => ["Play Local", "Copy Setup Challenge Link", "List in Lobby"],
   }),
   {
     name: "play-setup",
     prepare: async (page) => {
       await ensureSetupPage(page);
     },
-    requiredTexts: () => ["Play Local", "Invite Friend", "List in Lobby"],
+    requiredTexts: () => ["Play Local", "Copy Setup Challenge Link", "List in Lobby"],
   },
   {
     name: "online-lobby",

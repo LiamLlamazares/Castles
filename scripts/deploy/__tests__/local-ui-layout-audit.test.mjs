@@ -39,7 +39,7 @@ describe("local UI layout audit script", () => {
     expect(scenarioSteps("first-run-set-up-game")).toEqual([
       { action: "clickButton", text: "Set Up Game" },
       { action: "waitForButton", text: "Play Local" },
-      { action: "waitForText", text: "Invite Friend" },
+      { action: "waitForText", text: "Copy Setup Challenge Link" },
     ]);
   });
 

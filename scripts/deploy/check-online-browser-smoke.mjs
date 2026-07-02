@@ -31,7 +31,7 @@ const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);
 const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(socketTimeoutMs);
 const setupLabels = {
   configure: "Configure New Game",
-  inviteFriend: "Invite Friend",
+  inviteFriend: "Copy Setup Challenge Link",
 };
 
 function normalizeUrl(urlText) {
